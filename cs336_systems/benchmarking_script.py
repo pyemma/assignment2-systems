@@ -1,7 +1,6 @@
 import argparse
 import logging
 import timeit
-from typing import Callable
 
 import torch
 
@@ -58,7 +57,8 @@ def main(
     benchmark_iters: int = 10,
     mode: str = "forward",
 ):
-
+    print(f"Benchmarking {mode} mode...")
+    
     # setup device
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -95,8 +95,8 @@ def main(
         func(**params)
 
     # benchmark
-    t = timeit.timeit(func, **params, number=benchmark_iters)
-    logger.info(f"Time taken: {t/benchmark_iters} seconds per iteration")
+    t = timeit.timeit(lambda: func(**params), number=benchmark_iters)
+    print(f"Time taken: {t/benchmark_iters} seconds per iteration")
 
 if __name__ == "__main__":
     main()
