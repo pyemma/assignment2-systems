@@ -1,5 +1,5 @@
 import argparse
-import logging
+import math
 import timeit
 
 import torch
@@ -9,7 +9,6 @@ from cs336_basics.optimizer import AdamW
 from cs336_basics.nn_utils import cross_entropy
 
 VOCAB_SIZE = 10_000
-logger = logging.getLogger(__name__)
 
 def forward_pass(model, input) -> None:
     model(input)
@@ -95,8 +94,23 @@ def main(
         func(**params)
 
     # benchmark
-    t = timeit.timeit(lambda: func(**params), number=benchmark_iters)
-    print(f"Time taken: {t/benchmark_iters} seconds per iteration")
+    times = [timeit.timeit(lambda: func(**params), number=1) for _ in range(benchmark_iters)]
+    mean_time = sum(times) / benchmark_iters
+    var_time = sum((time - mean_time) ** 2 for time in times) / benchmark_iters
+    print(f"Time taken: {mean_time} seconds per iteration")
+    print(f"Variance: {var_time}")
+    print(f"Standard deviation: {math.sqrt(var_time)}")
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--context_length", type=int, default=1024)
+    parser.add_argument("--d_model", type=int, default=512)
+    parser.add_argument("--num_layers", type=int, default=4)
+    parser.add_argument("--num_heads", type=int, default=8)
+    parser.add_argument("--d_ff", type=int, default=1024)
+    parser.add_argument("--batch_size", type=int, default=4)
+    parser.add_argument("--warmup_iters", type=int, default=5)
+    parser.add_argument("--benchmark_iters", type=int, default=10)
+    parser.add_argument("--mode", type=str, default="forward")
+    args = parser.parse_args()
+    main(**vars(args))
