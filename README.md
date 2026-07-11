@@ -63,3 +63,13 @@ To submit, run `./test_and_make_submission.sh` . This script will install your
 code's dependencies, run tests, and create a gzipped tarball with the output. We
 should be able to unzip your submitted tarball and run
 `./test_and_make_submission.sh` to verify your test results.
+
+
+## Tips for RunPod
+
+The `nsys` command is not available in the pod by default, need to install manually
+
+- `wget -O nsight-systems.deb https://developer.nvidia.com/downloads/assets/tools/secure/nsight-systems/2026_3/NsightSystems-linux-cli-public-2026.3.1.157-3804839.deb`
+- `dpkg -i nsight-systems.deb`
+- `apt-get install -f`
+
