@@ -3,25 +3,29 @@ import math
 import timeit
 
 import torch
+import torch.cuda.nvtx as nvtx
 
 from cs336_basics.model import BasicsTransformerLM
 from cs336_basics.optimizer import AdamW
 from cs336_basics.nn_utils import cross_entropy
 
+from cs336_systems.annotated_sdpa import annotated_scaled_dot_product_attention
+
 VOCAB_SIZE = 10_000
 
+@nvtx.range("forward pass")
 def forward_pass(model, input) -> None:
     model(input)
     torch.cuda.synchronize()
 
-
+@nvtx.range("forward backward pass")
 def forward_backward_pass(model, input, target) -> None:
     output = model(input)
     loss = cross_entropy(output, target)
     loss.backward()
     torch.cuda.synchronize()
 
-
+@nvtx.range("forward backward optimizer step")
 def forward_backward_optimizer_step(model, input, target, optimizer) -> None:
     output = model(input)
     loss = cross_entropy(output, target)

@@ -73,3 +73,8 @@ The `nsys` command is not available in the pod by default, need to install manua
 - `dpkg -i nsight-systems.deb`
 - `apt-get install -f`
 
+The `uv` command is also not available by default on the pod, using the following instructions to install
+
+- `curl -LsSf https://astral.sh/uv/install.sh | sh`
+- `source $HOME/.local/bin/env`
+
