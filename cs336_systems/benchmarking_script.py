@@ -11,6 +11,10 @@ from cs336_basics.nn_utils import cross_entropy
 
 from cs336_systems.annotated_sdpa import annotated_scaled_dot_product_attention
 
+import cs336_basics
+# override the sdpa
+cs336_basics.model.scaled_dot_product_attention = annotated_scaled_dot_product_attention
+
 VOCAB_SIZE = 10_000
 
 @nvtx.range("forward pass")

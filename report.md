@@ -52,3 +52,16 @@ Time	Total Time	Instances	Avg	Med	Min	Max	StdDev	Name
 
 The fraction of time spend on matrix mulitiplication drops compare a full training step vs inference only step.
 
+(Note the following is computed over RTX 4500 which is using blackwell tensor core)
+In the current profling result, if we ignore the `aten:where`, the breakdown of time is as follow:
+- compute attention scores: 235.5 us
+- compute softmax: 164.4 us
+- compute output: 231.117 us
+
+Compre to their FLOPs (bsz: 4, d_model: 512, d_ff: 1024, context_length: 1024, num_heads: 8, d_k: 64):
+- compute attention scores: `bsz x 2 x seq x d_k x seq` = 536M
+- compute softmax: `bsz x seq x seq` = 4M
+- compute output: `bsz x 2 x seq x seq x d_v` = 546M
+
+From the computation, the attention scores and output FLOPs is idential given the matrix multiplication is similar; however, softmax FLOPs is much lower given its elementwise computation property, but the nsys profiling result shows its much higher than expected.
+
