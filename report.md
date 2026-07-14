@@ -34,3 +34,34 @@ Time taken: 0.05068178568035364 seconds per iteration
 Variance: 0.008258084730262794
 Standard deviation: 0.09087400470025954
 ```
+
+## Problem: Nsight System Profiling
+
+Use the same default model config as the pervous one
+
+The forward time is around 16ms, with additional 4ms on the cuda event sync, which is aligned with the number in the above benchmarking script.
+
+On the hardware I'm experiment with (RTX 3090, using Ampere Cuda Core), the most time consuming kernel is `ampere_sgemm_128x64_tn` kernel, which takes 33.4%, get invoked for 29 times in a single forward. In foward_backward, this kernel is still the most time consuming one, but the ratio drops to 9.6%, and the invoked time is still 29 times.
+
+There is some other kernel taking majority of time as well. Some elementwise kernel is also taking some time, this is especially obvious in forward backward pass, for example
+```
+Time	Total Time	Instances	Avg	Med	Min	Max	StdDev	Name
+9.6%	6.758 ms	29	233.036 μs	124.224 μs	122.657 μs	2.004 ms	344.816 μs	ampere_sgemm_128x64_tn
+8.7%	6.098 ms	68	89.680 μs	31.776 μs	1.408 μs	476.418 μs	143.101 μs	void at::native::vectorized_elementwise_kernel<(int)4, at::native::BinaryFunctor<float, float, float, at::native::binary_internal::MulFunctor<float>>, std::array<char *, (unsigned long)3>>(int, T2, T3)   
+```
+
+The fraction of time spend on matrix mulitiplication drops compare a full training step vs inference only step.
+
+(Note the following is computed over RTX 4500 which is using blackwell tensor core)
+In the current profling result, if we ignore the `aten:where`, the breakdown of time is as follow:
+- compute attention scores: 235.5 us
+- compute softmax: 164.4 us
+- compute output: 231.117 us
+
+Compre to their FLOPs (bsz: 4, d_model: 512, d_ff: 1024, context_length: 1024, num_heads: 8, d_k: 64):
+- compute attention scores: `bsz x 2 x seq x d_k x seq` = 536M
+- compute softmax: `bsz x seq x seq` = 4M
+- compute output: `bsz x 2 x seq x seq x d_v` = 546M
+
+From the computation, the attention scores and output FLOPs is idential given the matrix multiplication is similar; however, softmax FLOPs is much lower given its elementwise computation property, but the nsys profiling result shows its much higher than expected.
+
