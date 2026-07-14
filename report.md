@@ -65,3 +65,16 @@ Compre to their FLOPs (bsz: 4, d_model: 512, d_ff: 1024, context_length: 1024, n
 
 From the computation, the attention scores and output FLOPs is idential given the matrix multiplication is similar; however, softmax FLOPs is much lower given its elementwise computation property, but the nsys profiling result shows its much higher than expected.
 
+## Problem: Mixed Precision Accumulation
+
+The program output is as follow
+
+```
+tensor(10.0001)
+tensor(9.9531, dtype=torch.float16)
+tensor(10.0021)
+tensor(10.0021)
+```
+
+It shows that using `torch.float16` has the underflow issue, where the cumulatived result is lower than the expected one; while represent the value in `torch.float16` and cumulative into `torch.float32` shows overflow, the cumulatived value is higher.
+
