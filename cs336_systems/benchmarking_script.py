@@ -65,6 +65,7 @@ def main(
     benchmark_iters: int = 10,
     mode: str = "forward",
     dtype: str = "float32",
+    enable_memory_profiling: bool = False,
 ):
     print(f"Benchmarking {mode} mode...")
     
@@ -107,8 +108,19 @@ def main(
         for _ in range(warmup_iters):
             func(**params)
 
+        if enable_memory_profiling:
+            # start memroy profiling
+            torch.cuda.memory._record_memory_history(max_entries=1000000)
+
         # benchmark
         times = [timeit.timeit(lambda: func(**params), number=1) for _ in range(benchmark_iters)]
+
+        if enable_memory_profiling:
+            # stop memory profiling
+            filename = f"memory_snapshot_{mode}_{context_length}_{dtype}.pickle"
+            torch.cuda.memory._dump_snapshot(filename)
+            torch.cuda.memory._record_memory_history(enabled=None)
+
         mean_time = sum(times) / benchmark_iters
         var_time = sum((time - mean_time) ** 2 for time in times) / benchmark_iters
         print(f"Time taken: {mean_time} seconds per iteration")
@@ -127,5 +139,6 @@ if __name__ == "__main__":
     parser.add_argument("--benchmark_iters", type=int, default=10)
     parser.add_argument("--mode", type=str, default="forward")
     parser.add_argument("--dtype", type=str, default="float32")
+    parser.add_argument("--enable_memory_profiling", type=bool, default=False)
     args = parser.parse_args()
     main(**vars(args))
