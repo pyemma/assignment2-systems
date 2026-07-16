@@ -1,4 +1,5 @@
 import argparse
+from contextlib import nullcontext
 import math
 import timeit
 
@@ -63,6 +64,7 @@ def main(
     warmup_iters: int = 5,
     benchmark_iters: int = 10,
     mode: str = "forward",
+    dtype: str = "float32",
 ):
     print(f"Benchmarking {mode} mode...")
     
@@ -89,25 +91,29 @@ def main(
     input = batch[:, :-1]
     target = batch[:, 1:]
 
-    func = BENCHMARK_FUNCTIONS[mode]
-    params = {"model": model, "input": input}
-    if mode in ["forward_backward", "forward_backward_optimizer_step"]:
-        params["target"] = target
-    if mode == "forward_backward_optimizer_step":
-        params["optimizer"] = optimizer
+    # setup context manager for dtype
+    ctx = torch.autocast(device_type=device, dtype=torch.bfloat16) if dtype == "bfloat16" else nullcontext()
 
-    
-    # warmup before benchmarking
-    for _ in range(warmup_iters):
-        func(**params)
+    with ctx:
+        func = BENCHMARK_FUNCTIONS[mode]
+        params = {"model": model, "input": input}
+        if mode in ["forward_backward", "forward_backward_optimizer_step"]:
+            params["target"] = target
+        if mode == "forward_backward_optimizer_step":
+            params["optimizer"] = optimizer
 
-    # benchmark
-    times = [timeit.timeit(lambda: func(**params), number=1) for _ in range(benchmark_iters)]
-    mean_time = sum(times) / benchmark_iters
-    var_time = sum((time - mean_time) ** 2 for time in times) / benchmark_iters
-    print(f"Time taken: {mean_time} seconds per iteration")
-    print(f"Variance: {var_time}")
-    print(f"Standard deviation: {math.sqrt(var_time)}")
+        
+        # warmup before benchmarking
+        for _ in range(warmup_iters):
+            func(**params)
+
+        # benchmark
+        times = [timeit.timeit(lambda: func(**params), number=1) for _ in range(benchmark_iters)]
+        mean_time = sum(times) / benchmark_iters
+        var_time = sum((time - mean_time) ** 2 for time in times) / benchmark_iters
+        print(f"Time taken: {mean_time} seconds per iteration")
+        print(f"Variance: {var_time}")
+        print(f"Standard deviation: {math.sqrt(var_time)}")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -120,5 +126,6 @@ if __name__ == "__main__":
     parser.add_argument("--warmup_iters", type=int, default=5)
     parser.add_argument("--benchmark_iters", type=int, default=10)
     parser.add_argument("--mode", type=str, default="forward")
+    parser.add_argument("--dtype", type=str, default="float32")
     args = parser.parse_args()
     main(**vars(args))

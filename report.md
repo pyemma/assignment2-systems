@@ -65,3 +65,40 @@ Compre to their FLOPs (bsz: 4, d_model: 512, d_ff: 1024, context_length: 1024, n
 
 From the computation, the attention scores and output FLOPs is idential given the matrix multiplication is similar; however, softmax FLOPs is much lower given its elementwise computation property, but the nsys profiling result shows its much higher than expected.
 
+## Problem: Mixed Precision Accumulation
+
+The program output is as follow
+
+```
+tensor(10.0001)
+tensor(9.9531, dtype=torch.float16)
+tensor(10.0021)
+tensor(10.0021)
+```
+
+It shows that using `torch.float16` has the underflow issue, where the cumulatived result is lower than the expected one; while represent the value in `torch.float16` and cumulative into `torch.float32` shows overflow, the cumulatived value is higher.
+
+```
+model parameters dtype: torch.float32
+fc1 output dtype: torch.float16
+ln output dtype: torch.float32
+model prediction dtype: torch.float16
+loss dtype: torch.float32
+model parameters gradient dtype: torch.float32
+```
+
+LayerNorm needs to compute the norm for normalization, which is sensitive and need higher precision to avoid the cumulative error similar to the result above. Also FP16's range is too limited and could cause underflow or overflow issue. Also LayerNorm is elementwise operation and could not best leverage Tensor Cores. Change to BF16 does not resolve the issue, although its range is the save as FP32, but the precision is lower than FP16 and would still have the cumulative error.
+
+Under the original model setup, there is no big difference in the model forward pass, and the bf16 is even slightly slower than fp32. However, once we scale up to (bsz 32, d_model 1024, d_ff 4196), ther bf16 and fp32 has relative large performance difference.
+
+The fp32 forward pass is around 378ms, and the matrix multi kernel is taking 6.4ms on average
+```
+Time	Total Time	Instances	Avg	Med	Min	Max	StdDev	Name
+47.8%	180.424 ms	28	6.444 ms	2.710 ms	2.675 ms	12.386 ms	4.429 ms	void cutlass::Kernel2<cutlass_80_simt_sgemm_128x256_8x4_tn_align1>(T1::Params)
+```
+
+While for the bf16 version, the forward pass is around 164ms, and the matrix multi kernel is taking 2.2 ms on average
+```
+Time	Total Time	Instances	Avg	Med	Min	Max	StdDev	Name
+16.1%	26.478 ms	12	2.207 ms	2.174 ms	2.136 ms	2.312 ms	69.023 μs	void cutlass::Kernel2<cutlass_80_tensorop_bf16_s16816gemm_bf16_128x256_32x3_tn_align2>(T1::Params)
+```
