@@ -102,3 +102,46 @@ While for the bf16 version, the forward pass is around 164ms, and the matrix mul
 Time	Total Time	Instances	Avg	Med	Min	Max	StdDev	Name
 16.1%	26.478 ms	12	2.207 ms	2.174 ms	2.136 ms	2.312 ms	69.023 μs	void cutlass::Kernel2<cutlass_80_tensorop_bf16_s16816gemm_bf16_128x256_32x3_tn_align2>(T1::Params)
 ```
+
+## Problem: Memory Profiling
+
+Command
+
+- forward, context length 1024
+`uv run python cs336_systems/benchmarking_script.py --mode forward --enable_memory_profiling true`
+
+![forward, context length 1024](./fw_seq_1204.png)
+
+- forward + backward + optimizer, context length 1024
+`uv run python cs336_systems/benchmarking_script.py --mode forward_backward_optimizer_step --enable_memory_profiling true`
+
+![forward backward optimizer, context length 1024](./fw_bw_optm_seq_1024.png)
+
+Peak memory of forward: 1.9G
+Peak memory of forward + backward + optimizer: 2.6G
+
+- forward, context length 1024, mixed precision
+`uv run python cs336_systems/benchmarking_script.py --mode forward --enable_memory_profiling true --dtype bfloat16`
+
+Peak memory: 1.4G
+
+- forward + backward + optimizer, context length 1024, mixed precision
+`uv run python cs336_systems/benchmarking_script.py --mode forward_backward_optimizer_step --enable_memory_profiling true --dtype bfloat16`
+
+Peak memory: 2.0G
+
+Yes, the mixed precision affect the memory usage a lot, not only the compute kernel is more efficient, but the activation size is also reduced
+
+Also, from the computation, the spike of the memory comes from the softmax computation, where we would have a activation of size `bsz x num_head x seq x seq x dtype`.
+
+The size of the residual stream is essentially the input of shape `bsz x seq x d_model`, in the current setup with single precison, this gives `4 x 1024 x 512 x 4 = 8MB`
+
+128MB is the largest allocation, and it comes from softmax computation.
+
+`uv run nsys profile --trace=cuda,cudnn,cublas,osrt,nvtx --pytorch=functions-trace,autograd-shapes-nvtx --cudabacktrace=all --python-backtrace=cuda -- python cs336_systems/benchmarking_script.py --mode forward_backward_optimizer_step --enable_memory_profiling true --dtype bfloat16`
+
+`uv run nsys profile --trace=cuda,cudnn,cublas,osrt,nvtx --pytorch=functions-trace,autograd-shapes-nvtx --cudabacktrace=all --python-backtrace=cuda --cuda-memory-usage=true -- python cs336_systems/benchmarking_script.py --mode forward_backward_optimizer_step`
+
+But from my trace, there is not obvious change in the memory usage during the `forward_backward_optimize` step. The memory starts to cumulative to maximize of 3GB and then stay static and not freed; my hypothesis is that this is due to Pytorch memory allocator.
+
+`uv run nsys profile --trace=cuda,cudnn,cublas,osrt,nvtx --pytorch=functions-trace,autograd-shapes-nvtx --cudabacktrace=all --python-backtrace=cuda --cuda-memory-usage=true -- python cs336_systems/benchmarking_script.py --mode forward_backward`
