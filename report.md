@@ -145,3 +145,20 @@ The size of the residual stream is essentially the input of shape `bsz x seq x d
 But from my trace, there is not obvious change in the memory usage during the `forward_backward_optimize` step. The memory starts to cumulative to maximize of 3GB and then stay static and not freed; my hypothesis is that this is due to Pytorch memory allocator.
 
 `uv run nsys profile --trace=cuda,cudnn,cublas,osrt,nvtx --pytorch=functions-trace,autograd-shapes-nvtx --cudabacktrace=all --python-backtrace=cuda --cuda-memory-usage=true -- python cs336_systems/benchmarking_script.py --mode forward_backward`
+
+## Problem: Activation Checkpoint
+
+Vanila way to checkpoint each block does not reduce the complexity, block 1 would depends on block 0's output and resursively. Thus although each block's intermediate activation is reduced, the overall activation is still of `O(N)`.
+
+A better way is to use nested checkpoint, and wrap the blocks recursively to minimize the peak memory. This is similar to a balanced binary tree, where is the smallest tree hight, which is exact the peak memory (stack). This would give a `O(logN)` peak memory scale.
+
+> PS: without checkpoint, the sequential run with 16 blocks would have CUDA OOM issue on RTX 4500
+
+| N  | Peak memory (MiB) | Increment |
+|----|-------------------|-----------|
+| 4  |  9951.93          | -         |
+| 8  | 13173.08          |           |
+| 16 | 19615.40          |           |
+
+
+If the nested checkpoint is not allowed, then we could use `sqrt(N)` blocks to warp
