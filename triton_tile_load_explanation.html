@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Triton tile loads: pointers and masks</title>
+  <style>
+    :root {
+      --bg: #f6f4ef;
+      --paper: #fffdf8;
+      --ink: #1c1915;
+      --muted: #5c564c;
+      --line: #e4ddd0;
+      --accent: #9a3412;
+      --true: #166534;
+      --true-bg: #dcfce7;
+      --false: #991b1b;
+      --false-bg: #fee2e2;
+      --tile: #ffedd5;
+      --code-bg: #1c1915;
+      --code-fg: #f5f0e8;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--ink);
+      font: 17px/1.55 "Iowan Old Style", Palatino, "Palatino Linotype", Georgia, serif;
+    }
+    main {
+      max-width: 820px;
+      margin: 0 auto;
+      padding: 48px 24px 80px;
+    }
+    h1 {
+      font-size: 2rem;
+      line-height: 1.2;
+      margin: 0 0 8px;
+    }
+    h2 {
+      font-size: 1.35rem;
+      margin: 2.2rem 0 0.6rem;
+    }
+    p { margin: 0.7rem 0; }
+    .lede { color: var(--muted); font-size: 1.05rem; }
+    code, pre {
+      font-family: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 0.86rem;
+    }
+    code {
+      background: #efe8dc;
+      padding: 0.1em 0.35em;
+      border-radius: 4px;
+    }
+    pre {
+      background: var(--code-bg);
+      color: var(--code-fg);
+      padding: 16px 18px;
+      border-radius: 10px;
+      overflow-x: auto;
+      line-height: 1.45;
+    }
+    pre code { background: transparent; color: inherit; padding: 0; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 1rem 0 1.4rem;
+      background: var(--paper);
+    }
+    th, td {
+      border: 1px solid var(--line);
+      padding: 8px 10px;
+      text-align: left;
+      vertical-align: top;
+    }
+    th { background: #f3ece1; }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(6, 1fr);
+      gap: 6px;
+      margin: 12px 0 18px;
+    }
+    .cell {
+      background: var(--paper);
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      text-align: center;
+      padding: 10px 0;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 0.95rem;
+    }
+    .cell.tile { background: var(--tile); border-color: #fdba74; }
+    .cell.bad { background: var(--false-bg); border-color: #fca5a5; color: var(--false); }
+    .caption { color: var(--muted); font-size: 0.92rem; margin-top: -6px; }
+    .bools {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 6px;
+      max-width: 420px;
+      margin: 12px 0;
+    }
+    .bools span {
+      text-align: center;
+      padding: 8px 0;
+      border-radius: 6px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 0.85rem;
+    }
+    .t { background: var(--true-bg); color: var(--true); }
+    .f { background: var(--false-bg); color: var(--false); }
+    .note {
+      border-left: 3px solid var(--accent);
+      padding: 4px 0 4px 14px;
+      margin: 1rem 0;
+    }
+  </style>
+</head>
+<body>
+<main>
+  <h1>How a Triton tile load builds pointers and a mask</h1>
+  <p class="lede">The two lines below turn a program id into a 2D tile of addresses, then mark which of those addresses actually sit inside the tensor.</p>
+
+  <pre><code>ptrs = x_ptr + rows[:, None] * x_stride_row + cols[None, :] * x_stride_dim
+mask = (rows[:, None] &lt; NUM_ROWS) &amp; (cols[None, :] &lt; D)</code></pre>
+
+  <h2>1. The indexes are still 1D</h2>
+  <p>The program id chooses where the tile starts. <code>tl.arange</code> fills in the offsets inside the tile. With <code>ROWS_TILE_SIZE = 2</code>, <code>D_TILE_SIZE = 4</code>, and <code>row_tile_idx = 1</code>:</p>
+  <pre><code>rows = [2, 3]          # shape (2,)
+cols = [0, 1, 2, 3]    # shape (4,)</code></pre>
+  <p><code>rows</code> are the row coordinates of this tile. <code>cols</code> are the column coordinates. Nothing is two-dimensional yet.</p>
+
+  <h2>2. Broadcasting builds the grid</h2>
+  <p><code>rows[:, None]</code> has shape <code>(2, 1)</code>. <code>cols[None, :]</code> has shape <code>(1, 4)</code>. Adding or comparing them broadcasts to shape <code>(2, 4)</code>, one entry per element of the tile.</p>
+  <pre><code>rows[:, None]                cols[None, :]
+[[2],                        [[0, 1, 2, 3]]
+ [3]]
+
+broadcast row index          broadcast col index
+[[2, 2, 2, 2],               [[0, 1, 2, 3],
+ [3, 3, 3, 3]]                [0, 1, 2, 3]]</code></pre>
+  <p>Position <code>(i, j)</code> in that grid is the logical coordinate <code>(rows[i], cols[j])</code>.</p>
+
+  <h2>3. Strides turn coordinates into addresses</h2>
+  <p>For a contiguous row-major matrix, <code>x_stride_row = D</code> and <code>x_stride_dim = 1</code>. With <code>D = 6</code>:</p>
+  <pre><code>offset(i, j) = rows[i] * 6 + cols[j] * 1</code></pre>
+  <p>so the pointer grid is <code>x_ptr</code> plus:</p>
+  <pre><code>[[12, 13, 14, 15],
+ [18, 19, 20, 21]]</code></pre>
+  <p>Take a 5×6 matrix and the tile that starts at row 2. Those offsets are exactly the highlighted cells:</p>
+  <div class="grid" aria-label="5 by 6 matrix with a 2 by 4 tile highlighted">
+    <div class="cell">a</div><div class="cell">b</div><div class="cell">c</div><div class="cell">d</div><div class="cell">e</div><div class="cell">f</div>
+    <div class="cell">g</div><div class="cell">h</div><div class="cell">i</div><div class="cell">j</div><div class="cell">k</div><div class="cell">l</div>
+    <div class="cell tile">m</div><div class="cell tile">n</div><div class="cell tile">o</div><div class="cell tile">p</div><div class="cell">q</div><div class="cell">r</div>
+    <div class="cell tile">s</div><div class="cell tile">t</div><div class="cell tile">u</div><div class="cell tile">v</div><div class="cell">w</div><div class="cell">x</div>
+    <div class="cell">y</div><div class="cell">z</div><div class="cell">A</div><div class="cell">B</div><div class="cell">C</div><div class="cell">D</div>
+  </div>
+  <p class="caption">Row-major offsets of <code>m n o p</code> are 12–15. Offsets of <code>s t u v</code> are 18–21. <code>tl.load(ptrs)</code> reads that whole tile at once.</p>
+  <p>The address formula is the same one a block pointer uses internally:</p>
+  <pre><code>address(i, j) = base + i * strides[0] + j * strides[1]</code></pre>
+
+  <h2>4. The mask is the same grid, compared with the boundary</h2>
+  <pre><code>mask = (rows[:, None] &lt; NUM_ROWS) &amp; (cols[None, :] &lt; D)</code></pre>
+  <p>Same broadcast, but the result is booleans. With <code>NUM_ROWS = 5</code> and <code>D = 6</code>, every entry of the tile above is inside the tensor, so the mask is all true.</p>
+  <p>The last row tile is where the mask matters. If <code>row_tile_idx = 2</code>, then <code>rows = [4, 5]</code> while <code>NUM_ROWS = 5</code>:</p>
+  <div class="bools" aria-label="mask for a partial last tile">
+    <span class="t">True</span><span class="t">True</span><span class="t">True</span><span class="t">True</span>
+    <span class="f">False</span><span class="f">False</span><span class="f">False</span><span class="f">False</span>
+  </div>
+  <p class="caption"><code>rows[:, None] &lt; 5</code> for rows 4 and 5. Columns 0–3 are all inside <code>D = 6</code>, so only the row check fails.</p>
+  <p><code>tl.load(ptrs, mask=mask, other=0.0)</code> still receives a <code>(2, 4)</code> tile of pointers. It only dereferences the <code>True</code> lanes. The <code>False</code> lanes become <code>0.0</code> and are not read.</p>
+  <p>The matrix still ends at row 4 (<code>y z A B C D</code>). The tile wants a second row that is not in the allocation. The value returned by <code>tl.load</code> is still shape <code>(2, 4)</code>:</p>
+  <div class="bools" aria-label="loaded partial tile">
+    <span class="t">y</span><span class="t">z</span><span class="t">A</span><span class="t">B</span>
+    <span class="f">0</span><span class="f">0</span><span class="f">0</span><span class="f">0</span>
+  </div>
+  <p class="caption">Row 4 is loaded. The missing row is filled with <code>other=0.0</code> and is not read from memory.</p>
+
+  <h2>5. The same check with a block pointer</h2>
+  <p>The program id still picks the tile. <code>tl.make_block_ptr</code> stores the boundary instead of building the mask tensor yourself:</p>
+  <table>
+    <thead>
+      <tr><th>Old expression</th><th>Block-pointer argument</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>row_tile_idx * ROWS_TILE_SIZE</code></td><td><code>offsets</code></td></tr>
+      <tr><td><code>tl.arange</code> lengths</td><td><code>block_shape</code></td></tr>
+      <tr><td><code>NUM_ROWS</code>, <code>D</code> in the comparison</td><td><code>shape</code></td></tr>
+      <tr><td><code>x_stride_row</code>, <code>x_stride_dim</code></td><td><code>strides</code></td></tr>
+      <tr><td><code>mask</code> and <code>other=0.0</code></td><td><code>boundary_check</code> and <code>padding_option="zero"</code></td></tr>
+    </tbody>
+  </table>
+  <div class="note">
+    <p><code>make_block_ptr</code> does not apply the mask. <code>tl.load(..., boundary_check=(0, 1), padding_option="zero")</code> does. <code>boundary_check=(0,)</code> checks rows only, <code>(1,)</code> checks columns only, and <code>(0, 1)</code> is the full 2D mask.</p>
+  </div>
+</main>
+</body>
+</html>

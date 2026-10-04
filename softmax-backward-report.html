@@ -1,0 +1,713 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Why FlashAttention writes dS this way</title>
+<style>
+  :root {
+    --paper: #f3efe6;
+    --paper-2: #e7e1d6;
+    --ink: #1c1916;
+    --muted: #5e574f;
+    --line: #d4cdc2;
+    --teal: #0d6460;
+    --teal-soft: #d5ebe8;
+    --rust: #9a3b22;
+    --rust-soft: #f4e3dc;
+    --gold: #7a5b24;
+    --gold-soft: #f0e6cf;
+    --blue: #243e66;
+    --blue-soft: #dce4f0;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+    font-size: 18px;
+    line-height: 1.55;
+  }
+  main {
+    max-width: 980px;
+    margin: 0 auto;
+    padding: 48px 28px 80px;
+  }
+  header.hero {
+    border-top: 4px solid var(--ink);
+    padding-top: 22px;
+    margin-bottom: 36px;
+  }
+  .kicker {
+    font-family: "Avenir Next", "Segoe UI", sans-serif;
+    font-size: 12px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin: 0 0 10px;
+  }
+  h1 {
+    font-weight: 500;
+    font-size: 40px;
+    line-height: 1.12;
+    letter-spacing: -0.02em;
+    margin: 0 0 14px;
+  }
+  h2 {
+    font-weight: 500;
+    font-size: 28px;
+    line-height: 1.2;
+    margin: 48px 0 12px;
+    letter-spacing: -0.015em;
+  }
+  h3 {
+    font-weight: 600;
+    font-size: 18px;
+    margin: 0 0 8px;
+    font-family: "Avenir Next", "Segoe UI", sans-serif;
+  }
+  p { margin: 0 0 14px; }
+  .lede { font-size: 20px; max-width: 42em; }
+  a { color: var(--teal); }
+  .formula {
+    background: white;
+    border: 1px solid var(--line);
+    padding: 16px 18px;
+    margin: 16px 0;
+    overflow-x: auto;
+  }
+  .formula .eq {
+    font-family: "Iowan Old Style", Georgia, serif;
+    font-size: 22px;
+    line-height: 1.35;
+  }
+  .formula .eq + .eq { margin-top: 8px; }
+  sub, sup { font-size: 0.72em; }
+  .note {
+    font-family: "Avenir Next", "Segoe UI", sans-serif;
+    font-size: 14px;
+    color: var(--muted);
+    line-height: 1.45;
+  }
+  .grid-2 {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 22px;
+    align-items: start;
+  }
+  .grid-3 {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 14px;
+  }
+  figure {
+    margin: 18px 0 8px;
+  }
+  figcaption {
+    font-family: "Avenir Next", "Segoe UI", sans-serif;
+    font-size: 13.5px;
+    color: var(--muted);
+    line-height: 1.45;
+    margin-top: 8px;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-variant-numeric: tabular-nums;
+    font-family: "Avenir Next", "Segoe UI", sans-serif;
+    font-size: 15px;
+    background: white;
+  }
+  th, td {
+    border-bottom: 1px solid var(--line);
+    padding: 8px 10px;
+    text-align: right;
+  }
+  th:first-child, td:first-child { text-align: left; }
+  th {
+    font-weight: 600;
+    font-size: 12px;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+  tr.total td { border-bottom: none; font-weight: 650; }
+  .panel {
+    background: white;
+    border: 1px solid var(--line);
+    padding: 16px 16px 12px;
+  }
+  .swatch {
+    display: inline-block;
+    width: 9px;
+    height: 9px;
+    margin-right: 6px;
+    vertical-align: baseline;
+  }
+  .tag {
+    font-family: "Avenir Next", "Segoe UI", sans-serif;
+    font-size: 12px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+  svg text {
+    font-family: "Avenir Next", "Segoe UI", sans-serif;
+    fill: var(--ink);
+  }
+  .heat {
+    display: grid;
+    grid-template-columns: 36px repeat(3, 1fr);
+    gap: 4px;
+    font-family: "Avenir Next", "Segoe UI", sans-serif;
+    font-variant-numeric: tabular-nums;
+    font-size: 14px;
+  }
+  .heat .cell {
+    min-height: 52px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--line);
+  }
+  .heat .corner, .heat .lab {
+    background: transparent;
+    border: none;
+    color: var(--muted);
+    font-size: 12px;
+    letter-spacing: 0.04em;
+  }
+  .pos { background: var(--teal-soft); color: var(--teal); }
+  .neg { background: var(--rust-soft); color: var(--rust); }
+  .zero { background: #f7f5f1; color: var(--muted); }
+  .callout {
+    border-left: 3px solid var(--teal);
+    padding: 4px 0 4px 14px;
+    margin: 16px 0;
+  }
+  .slider-row {
+    display: grid;
+    grid-template-columns: 92px 1fr 64px;
+    gap: 10px;
+    align-items: center;
+    font-family: "Avenir Next", "Segoe UI", sans-serif;
+    font-size: 14px;
+    margin-bottom: 8px;
+  }
+  input[type="range"] { width: 100%; accent-color: var(--teal); }
+  .statline {
+    display: flex;
+    gap: 18px;
+    flex-wrap: wrap;
+    font-family: "Avenir Next", "Segoe UI", sans-serif;
+    font-size: 14px;
+    margin: 8px 0 12px;
+  }
+  .statline strong { font-variant-numeric: tabular-nums; }
+  .match { color: var(--teal); }
+  ol.steps { margin: 8px 0 0; padding-left: 1.2em; }
+  ol.steps li { margin: 0 0 8px; }
+  .arith {
+    font-family: "Avenir Next", "Segoe UI", sans-serif;
+    font-size: 14.5px;
+    background: var(--gold-soft);
+    padding: 10px 12px;
+    margin: 8px 0 0;
+  }
+  nav.toc {
+    font-family: "Avenir Next", "Segoe UI", sans-serif;
+    font-size: 14px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 16px;
+    margin: 18px 0 0;
+  }
+  nav.toc a { text-decoration: none; border-bottom: 1px solid var(--line); }
+  @media (max-width: 800px) {
+    h1 { font-size: 32px; }
+    .grid-2, .grid-3 { grid-template-columns: 1fr; }
+    main { padding: 28px 16px 64px; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <header class="hero">
+    <p class="kicker">One query row of attention · softmax backward</p>
+    <h1>Why FlashAttention computes <em>D</em>, and why <em>dS</em> has this shape</h1>
+    <p class="lede">Softmax only reacts to contrasts between scores. <em>D</em> is the baseline of the upstream gradient, measured with the probabilities as weights. Subtracting it, then scaling by <em>P</em>, is the whole Jacobian.</p>
+    <div class="formula">
+      <div class="eq">dS<sub>ij</sub> = P<sub>ij</sub> (dP<sub>ij</sub> − D<sub>i</sub>)</div>
+      <div class="eq">D<sub>i</sub> = Σ<sub>j</sub> P<sub>ij</sub> dP<sub>ij</sub> = Σ<sub>d</sub> O<sub>id</sub> dO<sub>id</sub></div>
+      <div class="eq">dS<sub>i</sub> = (diag(P<sub>i</sub>) − P<sub>i</sub> P<sub>i</sub><sup>⊤</sup>) dP<sub>i</sub></div>
+    </div>
+    <p class="note">Index <em>i</em> is the query. Index <em>j</em> is the key. Every picture below freezes one query, so <em>P<sub>i</sub></em> is a single vector of probabilities over keys. The big <em>N×N</em> attention matrix is just this row, repeated.</p>
+    <nav class="toc">
+      <a href="#kernel">Scores live in contrasts</a>
+      <a href="#jacobian">The two terms in the Jacobian</a>
+      <a href="#same">Matrix form equals scalar form</a>
+      <a href="#baseline">Why the baseline is weighted</a>
+      <a href="#output">Why D comes from O and dO</a>
+      <a href="#explorer">Move dO and watch D</a>
+    </nav>
+  </header>
+
+  <section id="example">
+    <h2>The row we will keep reusing</h2>
+    <p>Three keys, and a value dimension of 2, so every product can be checked by hand. This <em>P</em> is the softmax of some score row; the scores themselves can wait, because the backward formula never needs them except through <em>P</em>.</p>
+    <div class="grid-2">
+      <div>
+        <p class="tag">Forward</p>
+        <table>
+          <thead>
+            <tr><th>key j</th><th>P<sub>j</sub></th><th>row j of V</th><th>contribution P<sub>j</sub> V<sub>j</sub></th></tr>
+          </thead>
+          <tbody>
+            <tr><td>0</td><td>0.2</td><td>(1, 0)</td><td>(0.2, 0.0)</td></tr>
+            <tr><td>1</td><td>0.5</td><td>(0, 1)</td><td>(0.0, 0.5)</td></tr>
+            <tr><td>2</td><td>0.3</td><td>(1, 1)</td><td>(0.3, 0.3)</td></tr>
+            <tr class="total"><td>O = P V</td><td>1</td><td></td><td>(0.5, 0.8)</td></tr>
+          </tbody>
+        </table>
+        <p class="note">O is the probability-weighted mix of the value rows.</p>
+      </div>
+      <div>
+        <figure>
+          <svg viewBox="0 0 400 290" width="100%" role="img" aria-label="Probability simplex. The point sits closest to key 1.">
+            <polygon points="180,28 328,248 32,248" fill="#f7f4ee" stroke="#1c1916" stroke-width="1.25"/>
+            <circle cx="209.6" cy="204" r="5.5" fill="#0d6460"/>
+            <line x1="209.6" y1="204" x2="203.7" y2="168.8" stroke="#9a3b22" stroke-width="1.75" marker-end="url(#arrow)"/>
+            <text x="158" y="20" font-size="13">key 0</text>
+            <text x="332" y="266" font-size="13">key 1</text>
+            <text x="4" y="266" font-size="13">key 2</text>
+            <text x="220" y="222" font-size="13" fill="#0d6460">P = (0.2, 0.5, 0.3)</text>
+            <text x="214" y="160" font-size="12" fill="#9a3b22">nudge S₀ up</text>
+            <defs>
+              <marker id="arrow" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+                <path d="M0,0 L6,3 L0,6 Z" fill="#9a3b22"/>
+              </marker>
+            </defs>
+          </svg>
+          <figcaption>P is a point in the triangle of nonnegative weights that sum to 1. It sits nearest key 1 because that key holds half the mass. The rust arrow is the probability change from increasing S₀: the point moves toward key 0 and the three changes sum to 0, so it stays inside the triangle.</figcaption>
+        </figure>
+      </div>
+    </div>
+  </section>
+
+  <section id="kernel">
+    <h2>Softmax reads contrasts, so a baseline has to come back out</h2>
+    <p>Adding the same constant to every score multiplies every exponential by the same factor. That factor cancels in the normalizer, and the probabilities do not move.</p>
+    <div class="grid-2">
+      <figure class="panel">
+        <h3>Scores, before and after a constant shift</h3>
+        <svg viewBox="0 0 440 200" width="100%" role="img" aria-label="Two score rows that differ by a constant 2. The gaps between keys stay the same.">
+          <text x="0" y="16" font-size="13" fill="#5e574f">S = (0, 1, 0)</text>
+          <line x1="0" y1="118" x2="150" y2="118" stroke="#1c1916" stroke-width="1"/>
+          <rect x="8" y="116" width="34" height="2" fill="#243e66"/>
+          <rect x="54" y="90" width="34" height="28" fill="#243e66"/>
+          <rect x="100" y="116" width="34" height="2" fill="#243e66"/>
+          <text x="16" y="136" font-size="12">0</text>
+          <text x="62" y="136" font-size="12">1</text>
+          <text x="108" y="136" font-size="12">0</text>
+          <text x="8" y="158" font-size="12" fill="#5e574f">key 0</text>
+          <text x="54" y="158" font-size="12" fill="#5e574f">key 1</text>
+          <text x="100" y="158" font-size="12" fill="#5e574f">key 2</text>
+
+          <text x="220" y="16" font-size="13" fill="#5e574f">S′ = (2, 3, 2)</text>
+          <line x1="220" y1="118" x2="420" y2="118" stroke="#1c1916" stroke-width="1"/>
+          <rect x="236" y="62" width="34" height="56" fill="#243e66"/>
+          <rect x="286" y="34" width="34" height="84" fill="#243e66"/>
+          <rect x="336" y="62" width="34" height="56" fill="#243e66"/>
+          <text x="244" y="136" font-size="12">2</text>
+          <text x="294" y="136" font-size="12">3</text>
+          <text x="344" y="136" font-size="12">2</text>
+          <text x="228" y="158" font-size="12" fill="#5e574f">key 0</text>
+          <text x="278" y="158" font-size="12" fill="#5e574f">key 1</text>
+          <text x="328" y="158" font-size="12" fill="#5e574f">key 2</text>
+          <text x="220" y="184" font-size="12" fill="#5e574f">each bar is exactly 2 taller</text>
+        </svg>
+        <figcaption>Bar height is the score, drawn from a shared baseline. The second row is the first row plus 2 on every key. The gaps between keys are unchanged: key 1 is still 1 above its neighbors.</figcaption>
+      </figure>
+      <figure class="panel">
+        <h3>Probabilities after softmax</h3>
+        <svg viewBox="0 0 420 150" width="100%" role="img" aria-label="Both score rows softmax to the same probabilities.">
+          <text x="0" y="16" font-size="13" fill="#5e574f">softmax(S)</text>
+          <rect x="0" y="28" width="64" height="28" fill="#0d6460"/>
+          <rect x="74" y="28" width="173" height="28" fill="#0d6460"/>
+          <rect x="256" y="28" width="64" height="28" fill="#0d6460"/>
+          <text x="0" y="74" font-size="12">0.212</text>
+          <text x="74" y="74" font-size="12">0.576</text>
+          <text x="256" y="74" font-size="12">0.212</text>
+          <text x="0" y="108" font-size="13" fill="#5e574f">softmax(S′), same bars</text>
+          <rect x="0" y="116" width="64" height="28" fill="#0d6460"/>
+          <rect x="74" y="116" width="173" height="28" fill="#0d6460"/>
+          <rect x="256" y="116" width="64" height="28" fill="#0d6460"/>
+        </svg>
+        <figcaption>e<sup>2</sup>(1, e, 1) over its sum is the same triple as (1, e, 1) over its sum. The all-ones direction is invisible to softmax.</figcaption>
+      </figure>
+    </div>
+    <div class="callout">
+      <p>Going backward, the gradient has to respect that blindness. A piece of <em>dP</em> that is only a shared baseline cannot be turned into a score update, because no score update of the form “(c, c, c)” would have produced it. <em>D</em> is that baseline. The Jacobian subtracts it before anything is allowed to land in <em>dS</em>.</p>
+    </div>
+  </section>
+
+  <section id="jacobian">
+    <h2>Where the matrix diag(P) − PP<sup>⊤</sup> comes from</h2>
+    <p>Fix the normalizer Z = Σ<sub>k</sub> e<sup>S<sub>k</sub></sup> and P<sub>j</sub> = e<sup>S<sub>j</sub></sup> / Z. Differentiating one probability with respect to one score gives two cases.</p>
+    <div class="grid-2">
+      <div class="panel">
+        <h3>Same key, j = k</h3>
+        <p>Raising S<sub>j</sub> raises the numerator and the normalizer. The leftover is</p>
+        <p class="eq" style="font-size:20px;">∂P<sub>j</sub>/∂S<sub>j</sub> = P<sub>j</sub> (1 − P<sub>j</sub>)</p>
+        <p>For key 0 in the running example, 0.2 × 0.8 = 0.16. The factor (1 − P<sub>j</sub>) is the mass currently held by everyone else, which is the only room this key has to grow.</p>
+      </div>
+      <div class="panel">
+        <h3>Different key, j ≠ k</h3>
+        <p>Raising S<sub>k</sub> does not touch the numerator of P<sub>j</sub>. It only inflates the shared normalizer, so P<sub>j</sub> falls:</p>
+        <p class="eq" style="font-size:20px;">∂P<sub>j</sub>/∂S<sub>k</sub> = − P<sub>j</sub> P<sub>k</sub></p>
+        <p>Raising S₀ pulls 0.10 off key 1 and 0.06 off key 2. Each loss is the product of the two probabilities: the key you pushed, times the key that has to give the mass up.</p>
+      </div>
+    </div>
+    <figure>
+      <svg viewBox="0 0 920 210" width="100%" role="img" aria-label="Column of the Jacobian for increasing S0. Positive 0.16 on key 0, negative 0.10 and 0.06 on the other keys, total change 0.">
+        <text x="0" y="22" font-size="15">One column of the Jacobian: ∂P / ∂S₀</text>
+        <text x="560" y="22" font-size="13" fill="#5e574f">+0.16 − 0.10 − 0.06 = 0</text>
+        <line x1="40" y1="120" x2="880" y2="120" stroke="#1c1916" stroke-width="1"/>
+        <text x="8" y="116" font-size="12" fill="#5e574f">0</text>
+        <!-- scale: 0.16 -> 64px, so 400 px per unit. Center at y=120. Positive goes up. -->
+        <rect x="80" y="56" width="70" height="64" fill="#0d6460"/>
+        <text x="80" y="48" font-size="13" fill="#0d6460">+0.16</text>
+        <text x="80" y="200" font-size="13">key 0</text>
+        <rect x="360" y="120" width="70" height="40" fill="#9a3b22"/>
+        <text x="360" y="176" font-size="13" fill="#9a3b22">−0.10</text>
+        <text x="360" y="200" font-size="13">key 1</text>
+        <rect x="640" y="120" width="70" height="24" fill="#9a3b22"/>
+        <text x="640" y="160" font-size="13" fill="#9a3b22">−0.06</text>
+        <text x="640" y="200" font-size="13">key 2</text>
+      </svg>
+      <figcaption>Increasing S₀ moves probability onto key 0 and takes it off the others in proportion to the probability they currently hold. The signed changes sum to 0, which is the picture of “the row still sums to 1.” Stacking these columns for every key produces the Jacobian matrix below.</figcaption>
+    </figure>
+    <p>Both cases are one expression, P<sub>j</sub> (δ<sub>jk</sub> − P<sub>k</sub>). As a matrix acting on the probability vector, with rows and columns indexed by keys, that is</p>
+    <div class="formula">
+      <div class="eq">∂P<sub>i</sub>/∂S<sub>i</sub> = diag(P<sub>i</sub>) − P<sub>i</sub> P<sub>i</sub><sup>⊤</sup></div>
+    </div>
+    <p>The diagonal matrix is the “this key’s own numerator” piece. The outer product P<sub>i</sub> P<sub>i</sub><sup>⊤</sup> is the “shared normalizer” piece: every score talks to every probability. Their difference is the competition inside the row.</p>
+    <div class="grid-3">
+      <div>
+        <p class="tag">diag(P)</p>
+        <div class="heat" aria-label="Diagonal matrix of P">
+          <div class="corner"></div><div class="lab">k=0</div><div class="lab">k=1</div><div class="lab">k=2</div>
+          <div class="lab">j=0</div><div class="cell pos">0.20</div><div class="cell zero">0</div><div class="cell zero">0</div>
+          <div class="lab">j=1</div><div class="cell zero">0</div><div class="cell pos">0.50</div><div class="cell zero">0</div>
+          <div class="lab">j=2</div><div class="cell zero">0</div><div class="cell zero">0</div><div class="cell pos">0.30</div>
+        </div>
+      </div>
+      <div>
+        <p class="tag">P P<sup>⊤</sup></p>
+        <div class="heat" aria-label="Outer product of P with itself">
+          <div class="corner"></div><div class="lab">k=0</div><div class="lab">k=1</div><div class="lab">k=2</div>
+          <div class="lab">j=0</div><div class="cell neg">0.04</div><div class="cell neg">0.10</div><div class="cell neg">0.06</div>
+          <div class="lab">j=1</div><div class="cell neg">0.10</div><div class="cell neg">0.25</div><div class="cell neg">0.15</div>
+          <div class="lab">j=2</div><div class="cell neg">0.06</div><div class="cell neg">0.15</div><div class="cell neg">0.09</div>
+        </div>
+      </div>
+      <div>
+        <p class="tag">J = diag(P) − PP<sup>⊤</sup></p>
+        <div class="heat" aria-label="Softmax Jacobian">
+          <div class="corner"></div><div class="lab">k=0</div><div class="lab">k=1</div><div class="lab">k=2</div>
+          <div class="lab">j=0</div><div class="cell pos">0.16</div><div class="cell neg">−0.10</div><div class="cell neg">−0.06</div>
+          <div class="lab">j=1</div><div class="cell neg">−0.10</div><div class="cell pos">0.25</div><div class="cell neg">−0.15</div>
+          <div class="lab">j=2</div><div class="cell neg">−0.06</div><div class="cell neg">−0.15</div><div class="cell pos">0.21</div>
+        </div>
+      </div>
+    </div>
+    <p class="note">Teal cells push a probability up when its own score rises. Rust cells are the mass that key has to surrender. Column 0 of J is exactly the arrow drawn on the triangle. Each column sums to 0.</p>
+  </section>
+
+  <section id="same">
+    <h2>Multiplying by dP is the scalar formula</h2>
+    <p>The upstream gradient for this row is the vector dP. In the backward pass it arrives from the values, dP<sub>j</sub> = dO · (row j of V). Take dO = (0.4, −0.2):</p>
+    <table>
+      <thead>
+        <tr><th>key j</th><th>row of V</th><th>dP<sub>j</sub> = dO · V<sub>j</sub></th></tr>
+      </thead>
+      <tbody>
+        <tr><td>0</td><td>(1, 0)</td><td>0.4·1 + (−0.2)·0 = 0.40</td></tr>
+        <tr><td>1</td><td>(0, 1)</td><td>0.4·0 + (−0.2)·1 = −0.20</td></tr>
+        <tr><td>2</td><td>(1, 1)</td><td>0.4·1 + (−0.2)·1 = 0.20</td></tr>
+      </tbody>
+    </table>
+    <p>Apply J. Each entry of dS is one row of J dotted with dP.</p>
+    <div class="grid-2">
+      <div class="panel">
+        <h3>Matrix form</h3>
+        <div class="arith">
+          dS₀ = 0.16·(0.40) + (−0.10)·(−0.20) + (−0.06)·(0.20)<br>
+          = 0.064 + 0.020 − 0.012 = <strong>0.072</strong>
+        </div>
+        <div class="arith">
+          dS₁ = (−0.10)·(0.40) + 0.25·(−0.20) + (−0.15)·(0.20)<br>
+          = −0.040 − 0.050 − 0.030 = <strong>−0.120</strong>
+        </div>
+        <div class="arith">
+          dS₂ = (−0.06)·(0.40) + (−0.15)·(−0.20) + 0.21·(0.20)<br>
+          = −0.024 + 0.030 + 0.042 = <strong>0.048</strong>
+        </div>
+      </div>
+      <div class="panel">
+        <h3>Same arithmetic, factored</h3>
+        <p>Look at the first dot product and group the terms that contain P₀ = 0.2:</p>
+        <div class="arith">
+          dS₀ = P₀·dP₀ − P₀·(P₀·dP₀ + P₁·dP₁ + P₂·dP₂)<br>
+          = P₀ · dP₀ − P₀ · D
+        </div>
+        <p>The parenthesis is the same for every key. It is the definition of D:</p>
+        <div class="arith">
+          D = 0.2·(0.40) + 0.5·(−0.20) + 0.3·(0.20)<br>
+          = 0.08 − 0.10 + 0.06 = <strong>0.04</strong>
+        </div>
+        <p>So the three dots collapse to one multiply per key:</p>
+        <div class="arith">
+          dS<sub>j</sub> = P<sub>j</sub> (dP<sub>j</sub> − 0.04)<br>
+          = 0.2·0.36, 0.5·(−0.24), 0.3·0.16<br>
+          = <strong>0.072, −0.120, 0.048</strong>
+        </div>
+      </div>
+    </div>
+    <figure>
+      <svg id="static-bars" viewBox="0 0 920 280" width="100%" role="img" aria-label="Three bar groups: dP, dP minus D, and dS."></svg>
+      <figcaption>Left: the upstream gradient dP, with the baseline D = 0.04 drawn across it. Middle: after subtracting D, key 0 and key 2 stay positive and key 1, which was already below the baseline, becomes more negative. Right: multiplying by P shrinks every bar, most of all the keys whose probability is small. The right-hand bars are dS, and they sum to 0.</figcaption>
+    </figure>
+    <p>The multiply by P<sub>j</sub> is the saturation gate. A key with tiny probability has a tiny derivative P<sub>j</sub>(1 − P<sub>j</sub>), so the same gap (dP<sub>j</sub> − D) produces a small score gradient. The score would have to move a long way to change a probability that is pinned near 0, and the gradient with respect to the score is correspondingly small.</p>
+  </section>
+
+  <section id="baseline">
+    <h2>D is a weighted average, and the weights are P</h2>
+    <p>D = Σ<sub>j</sub> P<sub>j</sub> dP<sub>j</sub> is the expected upstream gradient if you draw a key from the attention distribution. It is the baseline the outer product builds: (P P<sup>⊤</sup> dP)<sub>j</sub> = P<sub>j</sub> (P · dP) = P<sub>j</sub> D. Every key is charged the same D, then rescaled by its own probability.</p>
+    <p>A uniform average of dP is a different number. Here the uniform mean is (0.40 − 0.20 + 0.20) / 3 ≈ 0.133, while D = 0.04. Key 1 holds half the probability and its upstream gradient is negative, so it pulls the weighted baseline down.</p>
+    <table>
+      <thead>
+        <tr>
+          <th>key j</th>
+          <th>P<sub>j</sub></th>
+          <th>dP<sub>j</sub></th>
+          <th>dP<sub>j</sub> − 0.133</th>
+          <th>P<sub>j</sub>(dP<sub>j</sub> − 0.133)</th>
+          <th>dP<sub>j</sub> − D</th>
+          <th>P<sub>j</sub>(dP<sub>j</sub> − D) = dS<sub>j</sub></th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td>0</td><td>0.2</td><td>0.40</td><td>0.267</td><td>0.053</td><td>0.36</td><td>0.072</td></tr>
+        <tr><td>1</td><td>0.5</td><td>−0.20</td><td>−0.333</td><td>−0.167</td><td>−0.24</td><td>−0.120</td></tr>
+        <tr><td>2</td><td>0.3</td><td>0.20</td><td>0.067</td><td>0.020</td><td>0.16</td><td>0.048</td></tr>
+      </tbody>
+    </table>
+    <p class="note">The uniform-baseline column is a different vector. The Jacobian’s baseline is the probability-weighted one, because the normalizer steals mass in proportion to the probability a key already holds, which is the −P<sub>j</sub> P<sub>k</sub> entry.</p>
+    <div class="callout">
+      <p>Sum of dS: 0.072 − 0.120 + 0.048 = 0. That identity is general, Σ<sub>j</sub> P<sub>j</sub> (dP<sub>j</sub> − D) = D − D · 1 = 0. The score gradient that comes out is a pure contrast, matching the fact that softmax ignores a constant shift of the scores.</p>
+    </div>
+  </section>
+
+  <section id="output">
+    <h2>Why FlashAttention forms D from O and dO</h2>
+    <p>Building D as P · dP seems to require the full probability row and the full upstream row dP. Both are length-<em>N</em> objects. The output row is only as long as the head dimension, and it carries the same dot product.</p>
+    <p>Substitute dP<sub>j</sub> = Σ<sub>d</sub> dO<sub>d</sub> V<sub>jd</sub> and O<sub>d</sub> = Σ<sub>j</sub> P<sub>j</sub> V<sub>jd</sub>:</p>
+    <div class="formula">
+      <div class="eq">Σ<sub>j</sub> P<sub>j</sub> dP<sub>j</sub> = Σ<sub>j</sub> P<sub>j</sub> Σ<sub>d</sub> dO<sub>d</sub> V<sub>jd</sub> = Σ<sub>d</sub> dO<sub>d</sub> Σ<sub>j</sub> P<sub>j</sub> V<sub>jd</sub> = Σ<sub>d</sub> dO<sub>d</sub> O<sub>d</sub></div>
+    </div>
+    <p>The two sums trade places. Weighting the per-key gradients by P, then summing, is the same operation as first mixing the values into O and then dotting with dO.</p>
+    <div class="grid-2">
+      <div class="panel">
+        <h3>Path through P and dP</h3>
+        <div class="arith">
+          dP = (0.40, −0.20, 0.20)<br>
+          P · dP = 0.2·0.40 + 0.5·(−0.20) + 0.3·0.20 = <strong>0.04</strong>
+        </div>
+      </div>
+      <div class="panel">
+        <h3>Path through O and dO</h3>
+        <div class="arith">
+          O = (0.50, 0.80), dO = (0.40, −0.20)<br>
+          O · dO = 0.50·0.40 + 0.80·(−0.20) = 0.20 − 0.16 = <strong>0.04</strong>
+        </div>
+      </div>
+    </div>
+    <figure>
+      <svg viewBox="0 0 920 230" width="100%" role="img" aria-label="Diagram showing the sum over keys and the sum over the head dimension are the same dot product.">
+        <rect x="20" y="30" width="250" height="170" fill="#ffffff" stroke="#d4cdc2"/>
+        <text x="36" y="56" font-size="14">For each key j</text>
+        <text x="36" y="88" font-size="15">dPⱼ = dO · Vⱼ</text>
+        <text x="36" y="116" font-size="15">weight by Pⱼ</text>
+        <text x="36" y="144" font-size="15">sum over keys</text>
+        <text x="36" y="178" font-size="16" fill="#0d6460">D = 0.04</text>
+        <text x="300" y="120" font-size="28">=</text>
+        <rect x="360" y="30" width="250" height="170" fill="#ffffff" stroke="#d4cdc2"/>
+        <text x="376" y="56" font-size="14">For each feature d</text>
+        <text x="376" y="88" font-size="15">O_d = P · column d of V</text>
+        <text x="376" y="116" font-size="15">weight by dO_d</text>
+        <text x="376" y="144" font-size="15">sum over features</text>
+        <text x="376" y="178" font-size="16" fill="#0d6460">D = 0.04</text>
+        <rect x="650" y="30" width="250" height="170" fill="#d5ebe8" stroke="#0d6460"/>
+        <text x="666" y="64" font-size="15">What this buys</text>
+        <text x="666" y="98" font-size="14">O and dO have shape</text>
+        <text x="666" y="120" font-size="14">sequence × head dim.</text>
+        <text x="666" y="150" font-size="14">Dᵢ is one scalar per</text>
+        <text x="666" y="172" font-size="14">query, computed before</text>
+        <text x="666" y="194" font-size="14">P is formed again.</text>
+      </svg>
+      <figcaption>Left sums over keys. Middle sums over the head dimension. They meet because O is defined to be that mix of V. The scalar Dᵢ can therefore be stored from the forward output and the output gradient, which are both much thinner than the N×N matrix of probabilities.</figcaption>
+    </figure>
+    <p>On the backward pass the block of P is recomputed from Q and K. The elementwise line dS<sub>ij</sub> = P<sub>ij</sub> (dP<sub>ij</sub> − D<sub>i</sub>) then applies the Jacobian without ever writing down the N×N matrix diag(P<sub>i</sub>) − P<sub>i</sub> P<sub>i</sub><sup>⊤</sup>. For a single row that matrix is N×N and rank-deficient; the factored form needs one multiply and one subtract per entry, plus the one scalar D<sub>i</sub> shared by the whole row.</p>
+  </section>
+
+  <section id="explorer">
+    <h2>Move dO and watch the baseline move</h2>
+    <p>P, V, and O stay fixed at the running example. The sliders are the two entries of dO. Both ways of computing D are shown live, and the bars are dP, then dP − D, then dS.</p>
+    <div class="panel">
+      <div class="slider-row">
+        <label for="do0">dO₀</label>
+        <input id="do0" type="range" min="-1" max="1" step="0.02" value="0.4">
+        <span id="do0v">0.40</span>
+      </div>
+      <div class="slider-row">
+        <label for="do1">dO₁</label>
+        <input id="do1" type="range" min="-1" max="1" step="0.02" value="-0.2">
+        <span id="do1v">−0.20</span>
+      </div>
+      <div class="statline">
+        <span>D from O · dO = <strong id="d-from-o">0.040</strong></span>
+        <span>D from P · dP = <strong id="d-from-p">0.040</strong></span>
+        <span class="match" id="d-match">equal</span>
+        <span>Σ<sub>j</sub> dS<sub>j</sub> = <strong id="ds-sum">0.000</strong></span>
+      </div>
+      <svg id="live-bars" viewBox="0 0 920 280" width="100%" role="img" aria-label="Live bar chart of dP, dP minus D, and dS."></svg>
+      <p class="note" id="live-readout"></p>
+    </div>
+    <p class="note">Dragging dO₁, which is the feature where key 1’s value lives, moves dP₁ and therefore moves D, because key 1 carries probability 0.5. The right-hand group stays a contrast: its three bars keep summing to 0.</p>
+  </section>
+
+  <section>
+    <h2>The two formulas, side by side</h2>
+    <table>
+      <thead>
+        <tr><th>Object</th><th>What it is in this row</th></tr>
+      </thead>
+      <tbody>
+        <tr><td style="text-align:left">diag(P) dP</td><td style="text-align:left">The local piece. Entry j is P<sub>j</sub> dP<sub>j</sub>.</td></tr>
+        <tr><td style="text-align:left">P P<sup>⊤</sup> dP</td><td style="text-align:left">The coupling. Entry j is P<sub>j</sub> D, with the same D = P · dP on every key.</td></tr>
+        <tr><td style="text-align:left">(diag(P) − PP<sup>⊤</sup>) dP</td><td style="text-align:left">Entry j is P<sub>j</sub> dP<sub>j</sub> − P<sub>j</sub> D = P<sub>j</sub> (dP<sub>j</sub> − D).</td></tr>
+        <tr><td style="text-align:left">D from O · dO</td><td style="text-align:left">The same scalar, summed over the head dimension instead of over keys.</td></tr>
+      </tbody>
+    </table>
+    <p style="margin-top:16px;">So dS<sub>i</sub> = (diag(P<sub>i</sub>) − P<sub>i</sub> P<sub>i</sub><sup>⊤</sup>) dP<sub>i</sub> is the Jacobian-vector product, and dS<sub>ij</sub> = P<sub>ij</sub> (dP<sub>ij</sub> − D<sub>i</sub>) is that product after the outer-product term has been recognized as a single row-wise dot product. FlashAttention computes the dot product from O and dO so the N×N probability matrix does not have to be stored in order to know the baseline.</p>
+  </section>
+</main>
+<script>
+(function () {
+  var P = [0.2, 0.5, 0.3];
+  var V = [[1, 0], [0, 1], [1, 1]];
+
+  function fmt(x) {
+    var sign = x < -1e-9 ? "−" : "";
+    return sign + Math.abs(x).toFixed(3);
+  }
+  function fmtShort(x) {
+    var sign = x < -1e-9 ? "−" : "";
+    return sign + Math.abs(x).toFixed(3);
+  }
+
+  function drawBars(svg, series, baseline) {
+    var zeroY = 148;
+    var groupW = 300;
+    var maxAbs = 0.2;
+    series.forEach(function (s) {
+      s.values.forEach(function (v) { maxAbs = Math.max(maxAbs, Math.abs(v)); });
+    });
+    if (baseline != null) maxAbs = Math.max(maxAbs, Math.abs(baseline));
+    var scale = 96 / maxAbs;
+    var ns = "http://www.w3.org/2000/svg";
+    while (svg.firstChild) svg.removeChild(svg.firstChild);
+    function el(name, attrs) {
+      var n = document.createElementNS(ns, name);
+      Object.keys(attrs).forEach(function (k) { n.setAttribute(k, attrs[k]); });
+      return n;
+    }
+    series.forEach(function (s, g) {
+      var x0 = 20 + g * groupW;
+      svg.appendChild(el("text", { x: x0, y: 22, "font-size": 14, fill: "#5e574f" }));
+      svg.lastChild.textContent = s.name;
+      svg.appendChild(el("line", { x1: x0, y1: zeroY, x2: x0 + 250, y2: zeroY, stroke: "#1c1916", "stroke-width": 1 }));
+      if (g === 0 && baseline != null) {
+        var by = zeroY - baseline * scale;
+        svg.appendChild(el("line", {
+          x1: x0, y1: by, x2: x0 + 250, y2: by,
+          stroke: "#9a3b22", "stroke-width": 1.25, "stroke-dasharray": "4 3"
+        }));
+        svg.appendChild(el("text", { x: x0 + 256, y: by + 4, "font-size": 12, fill: "#9a3b22" }));
+        svg.lastChild.textContent = "D";
+      }
+      s.values.forEach(function (v, j) {
+        var h = Math.abs(v) * scale;
+        var y = v >= 0 ? zeroY - h : zeroY;
+        var x = x0 + j * 78;
+        svg.appendChild(el("rect", {
+          x: x, y: y, width: 56, height: Math.max(h, 0.8), fill: s.colors[j]
+        }));
+        var labelY = v >= 0 ? Math.max(36, y - 6) : y + h + 14;
+        svg.appendChild(el("text", { x: x, y: labelY, "font-size": 12, fill: s.colors[j] }));
+        svg.lastChild.textContent = fmtShort(v);
+        svg.appendChild(el("text", { x: x, y: 262, "font-size": 12, fill: "#5e574f" }));
+        svg.lastChild.textContent = "key " + j;
+      });
+    });
+  }
+
+  var dP0 = [0.4, -0.2, 0.2];
+  var D0 = 0.04;
+  var centered = dP0.map(function (v) { return v - D0; });
+  var dS0 = centered.map(function (v, j) { return P[j] * v; });
+  var teal = "#0d6460";
+  var rust = "#9a3b22";
+  var blue = "#243e66";
+  drawBars(document.getElementById("static-bars"), [
+    { name: "dP", values: dP0, colors: [blue, blue, blue] },
+    { name: "dP − D", values: centered, colors: [rust, rust, rust] },
+    { name: "dS = P ∘ (dP − D)", values: dS0, colors: [teal, teal, teal] }
+  ], D0);
+
+  function update() {
+    var dO = [
+      parseFloat(document.getElementById("do0").value),
+      parseFloat(document.getElementById("do1").value)
+    ];
+    document.getElementById("do0v").textContent = fmt(dO[0]);
+    document.getElementById("do1v").textContent = fmt(dO[1]);
+    var O = [0.5, 0.8];
+    var dFromO = O[0] * dO[0] + O[1] * dO[1];
+    var dP = V.map(function (row) { return row[0] * dO[0] + row[1] * dO[1]; });
+    var dFromP = P[0] * dP[0] + P[1] * dP[1] + P[2] * dP[2];
+    var dS = dP.map(function (v, j) { return P[j] * (v - dFromP); });
+    var sum = dS[0] + dS[1] + dS[2];
+    document.getElementById("d-from-o").textContent = dFromO.toFixed(3);
+    document.getElementById("d-from-p").textContent = dFromP.toFixed(3);
+    document.getElementById("d-match").textContent = Math.abs(dFromO - dFromP) < 1e-9 ? "equal" : "drift";
+    document.getElementById("ds-sum").textContent = sum.toFixed(3);
+    drawBars(document.getElementById("live-bars"), [
+      { name: "dP", values: dP, colors: [blue, blue, blue] },
+      { name: "dP − D", values: dP.map(function (v) { return v - dFromP; }), colors: [rust, rust, rust] },
+      { name: "dS = P ∘ (dP − D)", values: dS, colors: [teal, teal, teal] }
+    ], dFromP);
+    document.getElementById("live-readout").textContent =
+      "dP = (" + dP.map(fmt).join(", ") + "),   D = " + fmt(dFromP) +
+      ",   dS = (" + dS.map(fmt).join(", ") + ").";
+  }
+  document.getElementById("do0").addEventListener("input", update);
+  document.getElementById("do1").addEventListener("input", update);
+  update();
+})();
+</script>
+</body>
+</html>
