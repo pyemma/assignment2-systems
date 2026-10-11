@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>From Equation 9 to Equation 17</title>
+<style>
+  :root {
+    --paper: #f3efe6;
+    --ink: #1c1916;
+    --muted: #5e574f;
+    --line: #d4cdc2;
+    --teal: #0d6460;
+    --teal-soft: #d5ebe8;
+    --rust: #9a3b22;
+    --rust-soft: #f4e3dc;
+    --gold: #7a5b24;
+    --gold-soft: #f0e6cf;
+    --blue: #243e66;
+    --blue-soft: #dce4f0;
+    --white: #fffcf7;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+    font-size: 18px;
+    line-height: 1.55;
+  }
+  main { max-width: 980px; margin: 0 auto; padding: 48px 28px 88px; }
+  header.hero { border-top: 4px solid var(--ink); padding-top: 22px; margin-bottom: 12px; }
+  .kicker {
+    font-family: "Avenir Next", "Segoe UI", sans-serif;
+    font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase;
+    color: var(--muted); margin: 0 0 10px;
+  }
+  h1 { font-weight: 500; font-size: 40px; line-height: 1.12; letter-spacing: -0.02em; margin: 0 0 14px; }
+  h2 { font-weight: 500; font-size: 28px; line-height: 1.2; margin: 42px 0 12px; letter-spacing: -0.015em; }
+  h3 { font-family: "Avenir Next", "Segoe UI", sans-serif; font-size: 15px; margin: 0 0 8px; }
+  p { margin: 0 0 14px; }
+  .lede { font-size: 20px; max-width: 42em; }
+  a { color: var(--teal); }
+  nav.toc {
+    display: flex; flex-wrap: wrap; gap: 8px 14px; margin: 18px 0 8px;
+    font-family: "Avenir Next", "Segoe UI", sans-serif; font-size: 14px;
+  }
+  nav.toc a { text-decoration: none; border-bottom: 1px solid var(--line); }
+  .formula {
+    background: var(--white); border: 1px solid var(--line);
+    padding: 14px 18px; margin: 14px 0;
+  }
+  .formula .eq { font-size: 22px; line-height: 1.4; }
+  .formula .eq + .eq { margin-top: 6px; }
+  .formula .who {
+    font-family: "Avenir Next", "Segoe UI", sans-serif;
+    font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase;
+    color: var(--muted); margin-bottom: 4px;
+  }
+  sub, sup { font-size: 0.72em; }
+  .note {
+    font-family: "Avenir Next", "Segoe UI", sans-serif;
+    font-size: 14px; color: var(--muted); line-height: 1.45;
+  }
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; align-items: start; }
+  .panel { background: var(--white); border: 1px solid var(--line); padding: 16px 16px 12px; }
+  .tag {
+    font-family: "Avenir Next", "Segoe UI", sans-serif;
+    font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted);
+  }
+  table {
+    width: 100%; border-collapse: collapse;
+    font-family: "Avenir Next", "Segoe UI", sans-serif;
+    font-size: 15px; font-variant-numeric: tabular-nums; background: var(--white);
+  }
+  th, td { border-bottom: 1px solid var(--line); padding: 8px 10px; text-align: right; }
+  th:first-child, td:first-child { text-align: left; }
+  th {
+    font-size: 12px; letter-spacing: 0.04em; text-transform: uppercase;
+    color: var(--muted); font-weight: 600;
+  }
+  .arith {
+    font-family: "Avenir Next", "Segoe UI", sans-serif;
+    font-size: 15px; background: var(--gold-soft); padding: 10px 12px; margin: 8px 0 0;
+  }
+  .callout { border-left: 3px solid var(--teal); padding: 2px 0 2px 14px; margin: 16px 0; }
+  figure { margin: 16px 0 6px; }
+  figcaption {
+    font-family: "Avenir Next", "Segoe UI", sans-serif;
+    font-size: 13.5px; color: var(--muted); line-height: 1.45; margin-top: 8px;
+  }
+  svg { display: block; width: 100%; height: auto; }
+  svg text { font-family: "Avenir Next", "Segoe UI", sans-serif; fill: var(--ink); }
+  .heat {
+    display: grid; grid-template-columns: 52px repeat(3, 1fr); gap: 4px;
+    font-family: "Avenir Next", "Segoe UI", sans-serif;
+    font-variant-numeric: tabular-nums; font-size: 14px;
+  }
+  .heat .cell {
+    min-height: 46px; display: flex; align-items: center; justify-content: center;
+    border: 1px solid var(--line);
+  }
+  .heat .lab, .heat .corner { border: none; color: var(--muted); font-size: 12px; display: flex; align-items: center; }
+  .pos { background: var(--teal-soft); color: var(--teal); }
+  .neg { background: var(--rust-soft); color: var(--rust); }
+  ol.steps { margin: 8px 0 0; padding-left: 1.25em; }
+  ol.steps li { margin: 0 0 10px; }
+  @media (max-width: 800px) {
+    h1 { font-size: 32px; }
+    .grid-2 { grid-template-columns: 1fr; }
+    main { padding: 28px 16px 64px; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <header class="hero">
+    <p class="kicker">Assignment handout · attention backward</p>
+    <h1>From the softmax Jacobian to one multiply per score</h1>
+    <p class="lede">Equation 9 multiplies the upstream gradient by an <em>N×N</em> Jacobian. Equation 17 is that same product after the outer-product term has been recognized as one scalar per query, <em>D<sub>i</sub></em>.</p>
+    <div class="grid-2">
+      <div class="formula">
+        <div class="who">Equation 9 · standard</div>
+        <div class="eq">dS<sub>i</sub> = (diag(P<sub>i</sub>) − P<sub>i</sub> P<sub>i</sub><sup>⊤</sup>) dP<sub>i</sub></div>
+      </div>
+      <div class="formula">
+        <div class="who">Equation 17 · recomputed</div>
+        <div class="eq">dS<sub>ij</sub> = P<sub>ij</sub> (dP<sub>ij</sub> − D<sub>i</sub>)</div>
+      </div>
+    </div>
+    <nav class="toc">
+      <a href="#row">One query row</a>
+      <a href="#jacobian">Build the Jacobian</a>
+      <a href="#picture">Watch one row factor</a>
+      <a href="#algebra">The algebra</a>
+      <a href="#numbers">Both sides, same numbers</a>
+      <a href="#recompute">Where recomputation enters</a>
+    </nav>
+  </header>
+
+  <section id="row">
+    <h2>Freeze one query</h2>
+    <p>Index <em>i</em> is the query and index <em>j</em> is the key. Equation 9 is already written per query: <em>P<sub>i</sub></em> and <em>dP<sub>i</sub></em> are vectors over keys, and the matrix in parentheses is <em>N×N</em> for that one row. The pictures below use three keys, so the matrix is 3×3 and every product can be checked by hand.</p>
+    <table>
+      <thead>
+        <tr><th>key j</th><th>P<sub>j</sub></th><th>dP<sub>j</sub></th></tr>
+      </thead>
+      <tbody>
+        <tr><td>0</td><td>0.20</td><td>0.40</td></tr>
+        <tr><td>1</td><td>0.50</td><td>−0.20</td></tr>
+        <tr><td>2</td><td>0.30</td><td>0.20</td></tr>
+      </tbody>
+    </table>
+    <p class="note">These probabilities are a softmax of some score row. The scores stay offstage until the last section, because Equation 9 only sees them through <em>P</em>.</p>
+  </section>
+
+  <section id="jacobian">
+    <h2>What the matrix in Equation 9 actually is</h2>
+    <p>For a single row, <em>P<sub>j</sub> = exp(S<sub>j</sub>) / Σ<sub>k</sub> exp(S<sub>k</sub>)</em>. Differentiating one probability with respect to one score gives</p>
+    <div class="formula">
+      <div class="eq">∂P<sub>j</sub> / ∂S<sub>k</sub> = P<sub>j</sub> (δ<sub>jk</sub> − P<sub>k</sub>)</div>
+    </div>
+    <p>Read across a fixed <em>j</em> and down the keys <em>k</em>, and that is one row of diag(<em>P</em>) − <em>PP<sup>⊤</sup></em>. The diagonal holds the “own numerator” term <em>P<sub>j</sub>(1 − P<sub>j</sub>)</em>. Every off-diagonal holds the “shared normalizer” term <em>−P<sub>j</sub> P<sub>k</sub></em>.</p>
+    <div class="grid-2">
+      <div>
+        <p class="tag">diag(P) − PP<sup>⊤</sup></p>
+        <div class="heat" aria-label="Softmax Jacobian, rows j, columns k">
+          <div class="corner"></div><div class="lab">k = 0</div><div class="lab">k = 1</div><div class="lab">k = 2</div>
+          <div class="lab">j = 0</div><div class="cell pos">0.16</div><div class="cell neg">−0.10</div><div class="cell neg">−0.06</div>
+          <div class="lab">j = 1</div><div class="cell neg">−0.10</div><div class="cell pos">0.25</div><div class="cell neg">−0.15</div>
+          <div class="lab">j = 2</div><div class="cell neg">−0.06</div><div class="cell neg">−0.15</div><div class="cell pos">0.21</div>
+        </div>
+        <p class="note">Row 0, column 0 is 0.20 × (1 − 0.20) = 0.16. Row 0, column 1 is −0.20 × 0.50 = −0.10.</p>
+      </div>
+      <div class="panel">
+        <h3>Equation 9, applied to the row</h3>
+        <p>Each entry of <em>dS</em> is one row of that matrix dotted with <em>dP</em>.</p>
+        <div class="arith">
+          dS<sub>0</sub> = 0.16·0.40 + (−0.10)·(−0.20) + (−0.06)·0.20<br>
+          = 0.064 + 0.020 − 0.012 = <strong>0.072</strong>
+        </div>
+        <div class="arith">
+          dS<sub>1</sub> = (−0.10)·0.40 + 0.25·(−0.20) + (−0.15)·0.20 = <strong>−0.120</strong>
+        </div>
+        <div class="arith">
+          dS<sub>2</sub> = (−0.06)·0.40 + (−0.15)·(−0.20) + 0.21·0.20 = <strong>0.048</strong>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="picture">
+    <h2>The same multiply, drawn so the shared scalar shows up</h2>
+    <p>Look at row 0 only. Every entry in that row already contains the factor <em>P<sub>0</sub> = 0.20</em>. Pull it out, and the three-term dot product becomes one subtraction.</p>
+    <figure>
+      <svg viewBox="0 0 960 430" width="100%" role="img" aria-label="Row zero of the Jacobian dotted with dP factors into P times dP minus D.">
+        <text x="0" y="22" font-size="13" fill="#5e574f">EQUATION 9, ONE ROW</text>
+        <rect x="0" y="36" width="250" height="118" fill="#fffcf7" stroke="#d4cdc2"/>
+        <text x="14" y="58" font-size="13" fill="#5e574f">row 0 of the Jacobian</text>
+        <rect x="14" y="72" width="68" height="36" fill="#d5ebe8" stroke="#0d6460"/>
+        <text x="28" y="95" font-size="14" fill="#0d6460">0.16</text>
+        <rect x="88" y="72" width="68" height="36" fill="#f4e3dc" stroke="#9a3b22"/>
+        <text x="96" y="95" font-size="14" fill="#9a3b22">−0.10</text>
+        <rect x="162" y="72" width="68" height="36" fill="#f4e3dc" stroke="#9a3b22"/>
+        <text x="172" y="95" font-size="14" fill="#9a3b22">−0.06</text>
+        <text x="14" y="132" font-size="12" fill="#5e574f">each cell is 0.20 × (δ − Pₖ)</text>
+
+        <text x="268" y="100" font-size="22">·</text>
+
+        <rect x="300" y="36" width="92" height="118" fill="#fffcf7" stroke="#d4cdc2"/>
+        <text x="314" y="58" font-size="13" fill="#5e574f">dP</text>
+        <text x="322" y="86" font-size="15">0.40</text>
+        <text x="318" y="110" font-size="15">−0.20</text>
+        <text x="322" y="134" font-size="15">0.20</text>
+
+        <text x="408" y="100" font-size="22">=</text>
+
+        <rect x="444" y="56" width="150" height="72" fill="#d5ebe8" stroke="#0d6460"/>
+        <text x="458" y="84" font-size="13" fill="#5e574f">dS for key 0</text>
+        <text x="458" y="110" font-size="20" fill="#0d6460">0.072</text>
+
+        <text x="0" y="188" font-size="13" fill="#5e574f">FACTOR 0.20 OUT OF EVERY CELL IN THIS ROW</text>
+        <line x1="40" y1="206" x2="40" y2="236" stroke="#1c1916" stroke-width="1.25"/>
+        <line x1="40" y1="236" x2="470" y2="236" stroke="#1c1916" stroke-width="1.25"/>
+        <polygon points="470,230 470,242 482,236" fill="#1c1916"/>
+
+        <rect x="0" y="252" width="620" height="78" fill="#f0e6cf" stroke="#7a5b24"/>
+        <text x="16" y="278" font-size="15">0.20 · 0.40  −  0.20 · (0.20·0.40 + 0.50·(−0.20) + 0.30·0.20)</text>
+        <text x="16" y="306" font-size="15" fill="#7a5b24">0.20 · (0.40 − 0.04) = 0.072</text>
+
+        <rect x="660" y="252" width="280" height="150" fill="#fffcf7" stroke="#1c1916"/>
+        <text x="676" y="278" font-size="13" fill="#5e574f">THE PARENTHESIS</text>
+        <text x="676" y="308" font-size="16">D = Σₖ Pₖ dPₖ</text>
+        <text x="676" y="336" font-size="15">= 0.08 − 0.10 + 0.06</text>
+        <text x="676" y="368" font-size="22" fill="#7a5b24">D = 0.04</text>
+        <text x="676" y="392" font-size="13" fill="#5e574f">same number in every row</text>
+      </svg>
+      <figcaption>Top: Equation 9 for key 0 is a dot product against one row of the Jacobian. Bottom: that row is <em>P<sub>0</sub></em> times <em>(1, −P<sub>1</sub>, −P<sub>2</sub>)</em> in the appropriate slots, so <em>P<sub>0</sub></em> factors out. What remains inside the parentheses is <em>dP<sub>0</sub></em> minus a weighted sum of the whole <em>dP</em> vector. That weighted sum does not depend on which key’s row you are simplifying. It is <em>D</em>.</figcaption>
+    </figure>
+  </section>
+
+  <section id="algebra">
+    <h2>Write the dot product once, for a general key</h2>
+    <p>Row <em>j</em> of the Jacobian, column <em>k</em>, is <em>P<sub>j</sub> (δ<sub>jk</sub> − P<sub>k</sub>)</em>. Dot it with <em>dP</em>:</p>
+    <div class="formula">
+      <div class="eq">dS<sub>j</sub> = Σ<sub>k</sub> P<sub>j</sub> (δ<sub>jk</sub> − P<sub>k</sub>) dP<sub>k</sub></div>
+    </div>
+    <p><em>P<sub>j</sub></em> does not depend on <em>k</em>, so it leaves the sum. The Kronecker delta keeps a single term:</p>
+    <div class="formula">
+      <div class="eq">dS<sub>j</sub> = P<sub>j</sub> · dP<sub>j</sub> − P<sub>j</sub> · Σ<sub>k</sub> P<sub>k</sub> dP<sub>k</sub></div>
+    </div>
+    <p>The sum is a scalar. Name it.</p>
+    <div class="formula">
+      <div class="eq">D = Σ<sub>k</sub> P<sub>k</sub> dP<sub>k</sub></div>
+      <div class="eq">dS<sub>j</sub> = P<sub>j</sub> (dP<sub>j</sub> − D)</div>
+    </div>
+    <p>Put the query index back on, and this is Equation 17. The matrix diag(<em>P<sub>i</sub></em>) − <em>P<sub>i</sub> P<sub>i</sub><sup>⊤</sup></em> was real; it just never has to be stored. Its action on <em>dP<sub>i</sub></em> is an elementwise multiply by <em>P<sub>i</sub></em> after subtracting one number from every entry of <em>dP<sub>i</sub></em>.</p>
+    <div class="callout">
+      <p>Two pieces, two jobs. Subtracting <em>D<sub>i</sub></em> removes the part of <em>dP</em> that is only a shared baseline, which softmax cannot see, because adding a constant to every score in the row does not change <em>P</em>. Multiplying by <em>P<sub>ij</sub></em> is the local scale from the derivative <em>P<sub>j</sub>(1 − P<sub>j</sub>)</em> and from the coupling <em>−P<sub>j</sub> P<sub>k</sub></em>, both of which carry a factor <em>P<sub>j</sub></em>.</p>
+    </div>
+  </section>
+
+  <section id="numbers">
+    <h2>The three keys, both ways</h2>
+    <p><em>D = 0.04</em> for this row. Equation 17 uses it once per key.</p>
+    <table>
+      <thead>
+        <tr><th>key j</th><th>P<sub>j</sub></th><th>dP<sub>j</sub> − D</th><th>P<sub>j</sub> (dP<sub>j</sub> − D)</th><th>row j of J, dotted with dP</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>0</td><td>0.20</td><td>0.36</td><td>0.072</td><td>0.072</td></tr>
+        <tr><td>1</td><td>0.50</td><td>−0.24</td><td>−0.120</td><td>−0.120</td></tr>
+        <tr><td>2</td><td>0.30</td><td>0.16</td><td>0.048</td><td>0.048</td></tr>
+      </tbody>
+    </table>
+    <p class="note">The last two columns are Equation 17 and Equation 9. They match entrywise. Also 0.072 − 0.120 + 0.048 = 0: the score gradient is a pure contrast, which is what you expect once a constant shift of <em>S</em> has been quotiented out.</p>
+  </section>
+
+  <section id="recompute">
+    <h2>Why this form can be recomputed</h2>
+    <p>Equation 9, written as a matrix, asks you to hold <em>P</em> from the forward pass and then build an <em>N×N</em> Jacobian. Equation 17 asks for two thinner things: the probabilities themselves, and one scalar <em>D<sub>i</sub></em> per query.</p>
+    <div class="grid-2">
+      <div class="panel">
+        <h3>The scalar, without the length-<em>N</em> row</h3>
+        <p><em>D<sub>i</sub> = Σ<sub>j</sub> P<sub>ij</sub> dP<sub>ij</sub></em> still looks like it needs the full probability row. Substitute the two definitions that produced those vectors. <em>dP<sub>ij</sub></em> is the dot of <em>dO<sub>i</sub></em> with value row <em>j</em>, and <em>O<sub>i</sub></em> is <em>P<sub>i</sub></em> mixed with <em>V</em>:</p>
+        <div class="formula">
+          <div class="eq">Σ<sub>j</sub> P<sub>ij</sub> dP<sub>ij</sub> = Σ<sub>d</sub> O<sub>id</sub> dO<sub>id</sub></div>
+        </div>
+        <p>The sum over keys and the sum over the head dimension are the same contraction. On this example, <em>O = (0.50, 0.80)</em> and <em>dO = (0.40, −0.20)</em>, and</p>
+        <div class="arith">0.50·0.40 + 0.80·(−0.20) = 0.20 − 0.16 = <strong>0.04</strong></div>
+        <p>which is the <em>D</em> already computed from <em>P · dP</em>. So <em>D</em> is <em>rowsum(O ∘ dO)</em>, available from the forward output and the output gradient before any key tile is revisited.</p>
+      </div>
+      <div class="panel">
+        <h3>The probabilities, rebuilt per tile</h3>
+        <p>The forward pass saved the log-sum-exp <em>L<sub>i</sub> = log Σ<sub>j</sub> exp(S<sub>ij</sub>)</em> instead of <em>P</em>. A tile of scores is <em>S = QK<sup>⊤</sup> / √d</em> again, and</p>
+        <div class="formula">
+          <div class="eq">P<sub>ij</sub> = exp(S<sub>ij</sub> − L<sub>i</sub>)</div>
+        </div>
+        <p>is Equation 14. Together with <em>dP = dO V<sup>⊤</sup></em> from Equation 16, every ingredient of Equation 17 is either recomputed for the current query tile and key tile, or already sitting in the length-<em>N<sub>q</sub></em> vector <em>D</em>.</p>
+      </div>
+    </div>
+    <figure>
+      <svg viewBox="0 0 960 210" width="100%" role="img" aria-label="Standard backward stores an N by N matrix. The recomputed form stores one scalar per query and rebuilds a tile of P.">
+        <rect x="0" y="28" width="300" height="160" fill="#f4e3dc" stroke="#9a3b22"/>
+        <text x="16" y="54" font-size="13" fill="#9a3b22">STANDARD, EQUATION 9</text>
+        <text x="16" y="86" font-size="16">save P, shape N × N</text>
+        <text x="16" y="114" font-size="16">form J, shape N × N</text>
+        <text x="16" y="142" font-size="16">dS = J dP</text>
+        <text x="16" y="170" font-size="14" fill="#5e574f">one row’s Jacobian is the whole story</text>
+
+        <text x="330" y="112" font-size="22">→</text>
+
+        <rect x="380" y="28" width="560" height="160" fill="#d5ebe8" stroke="#0d6460"/>
+        <text x="396" y="54" font-size="13" fill="#0d6460">RECOMPUTE, EQUATION 17</text>
+        <text x="396" y="84" font-size="15">D, one scalar per query, from O and dO</text>
+        <text x="396" y="112" font-size="15">P rebuilt on the tile as exp(S − L)</text>
+        <text x="396" y="140" font-size="15">dS = P multiplied by (dP − D)</text>
+        <text x="396" y="170" font-size="14" fill="#5e574f">the N × N Jacobian is never written down</text>
+      </svg>
+      <figcaption>Left is the backward pass that materializes the attention matrix and its Jacobian. Right is the same map on each score. <em>D</em> is precomputed from <em>O</em> and <em>dO</em>. <em>P</em> for the current tile is rebuilt from <em>Q</em>, <em>K</em>, and the saved log-sum-exp. The elementwise line is Equation 9 after the factoring above.</figcaption>
+    </figure>
+  </section>
+</main>
+</body>
+</html>

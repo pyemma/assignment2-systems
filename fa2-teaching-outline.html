@@ -1,0 +1,440 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Teaching FlashAttention-2: a lesson script</title>
+<style>
+  :root {
+    --paper: #f3efe6;
+    --paper-2: #e7e1d6;
+    --ink: #1c1916;
+    --muted: #5e574f;
+    --line: #d4cdc2;
+    --teal: #0d6460;
+    --teal-soft: #d5ebe8;
+    --rust: #9a3b22;
+    --rust-soft: #f4e3dc;
+    --gold: #7a5b24;
+    --gold-soft: #f0e6cf;
+    --blue: #243e66;
+    --blue-soft: #dce4f0;
+    --white: #fffcf7;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+    font-size: 18px;
+    line-height: 1.55;
+  }
+  main {
+    max-width: 920px;
+    margin: 0 auto;
+    padding: 48px 28px 96px;
+  }
+  header.hero {
+    border-top: 4px solid var(--ink);
+    padding-top: 22px;
+    margin-bottom: 28px;
+  }
+  .kicker {
+    font-family: "Avenir Next", "Segoe UI", sans-serif;
+    font-size: 12px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin: 0 0 10px;
+  }
+  h1 {
+    font-weight: 500;
+    font-size: 42px;
+    line-height: 1.12;
+    letter-spacing: -0.02em;
+    margin: 0 0 14px;
+  }
+  h2 {
+    font-weight: 500;
+    font-size: 28px;
+    line-height: 1.2;
+    margin: 0 0 12px;
+    letter-spacing: -0.015em;
+  }
+  h3 {
+    font-weight: 600;
+    font-size: 16px;
+    margin: 18px 0 8px;
+    font-family: "Avenir Next", "Segoe UI", sans-serif;
+    letter-spacing: 0.01em;
+  }
+  p { margin: 0 0 14px; }
+  .lede { font-size: 20px; max-width: 40em; }
+  a { color: var(--teal); }
+  ol, ul { margin: 0 0 14px; padding-left: 1.2em; }
+  li { margin: 0 0 6px; }
+  nav.toc {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin: 22px 0 8px;
+  }
+  nav.toc a {
+    font-family: "Avenir Next", "Segoe UI", sans-serif;
+    font-size: 13px;
+    text-decoration: none;
+    color: var(--ink);
+    background: var(--white);
+    border: 1px solid var(--line);
+    padding: 6px 10px;
+  }
+  nav.toc a:hover { border-color: var(--teal); color: var(--teal); }
+  section.slide {
+    background: var(--white);
+    border: 1px solid var(--line);
+    margin: 22px 0;
+    padding: 26px 26px 22px;
+  }
+  .slide-label {
+    font-family: "Avenir Next", "Segoe UI", sans-serif;
+    font-size: 12px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--teal);
+    margin: 0 0 8px;
+  }
+  .ask, .do, .say {
+    border-left: 3px solid var(--line);
+    padding: 10px 14px;
+    margin: 14px 0;
+    background: var(--paper);
+  }
+  .ask { border-color: var(--rust); background: var(--rust-soft); }
+  .do { border-color: var(--gold); background: var(--gold-soft); }
+  .say { border-color: var(--teal); background: var(--teal-soft); }
+  .tag {
+    font-family: "Avenir Next", "Segoe UI", sans-serif;
+    font-size: 11px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    display: block;
+    margin-bottom: 4px;
+  }
+  .ask .tag { color: var(--rust); }
+  .do .tag { color: var(--gold); }
+  .say .tag { color: var(--teal); }
+  .shapes {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr auto 1fr;
+    gap: 8px;
+    align-items: center;
+    margin: 16px 0;
+    font-family: "Avenir Next", "Segoe UI", sans-serif;
+    font-size: 14px;
+  }
+  .box {
+    border: 1px solid var(--ink);
+    background: var(--blue-soft);
+    padding: 10px 12px;
+    text-align: center;
+  }
+  .box strong { display: block; font-size: 15px; }
+  .box span { color: var(--muted); font-size: 12px; display: block; }
+  .op { color: var(--muted); text-align: center; }
+  .mem {
+    display: grid;
+    grid-template-columns: 1.2fr 1fr;
+    gap: 12px;
+    margin: 16px 0;
+  }
+  .panel {
+    border: 1px solid var(--line);
+    padding: 12px 14px;
+    background: var(--paper);
+  }
+  .panel h3 { margin-top: 0; }
+  .hbm { background: var(--rust-soft); }
+  .sram { background: var(--teal-soft); }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-family: "Avenir Next", "Segoe UI", sans-serif;
+    font-size: 14px;
+    margin: 12px 0 4px;
+  }
+  th, td {
+    border-bottom: 1px solid var(--line);
+    text-align: left;
+    padding: 8px 8px;
+    vertical-align: top;
+  }
+  th { color: var(--muted); font-weight: 600; font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; }
+  .tiles {
+    display: grid;
+    grid-template-columns: 88px 1fr;
+    gap: 10px;
+    margin: 16px 0 8px;
+    font-family: "Avenir Next", "Segoe UI", sans-serif;
+    font-size: 13px;
+  }
+  .qcol, .kvrow { display: grid; gap: 6px; }
+  .qcol { grid-template-rows: repeat(4, 36px); }
+  .kvrow { grid-template-columns: repeat(4, 1fr); }
+  .tile {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--ink);
+  }
+  .qt { background: var(--blue-soft); }
+  .qt.on { background: var(--blue); color: white; }
+  .kt { background: var(--gold-soft); }
+  .kt.on { background: var(--gold); color: white; }
+  .vt { background: var(--teal-soft); }
+  .blank {
+    display: inline-block;
+    min-width: 7em;
+    border-bottom: 1px solid var(--ink);
+    height: 1.1em;
+  }
+  .grid4 {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 8px;
+    margin: 10px 0 14px;
+  }
+  .cell {
+    background: var(--paper);
+    border: 1px dashed var(--muted);
+    min-height: 64px;
+    padding: 8px;
+    font-family: "Avenir Next", "Segoe UI", sans-serif;
+    font-size: 13px;
+    color: var(--muted);
+  }
+  .beats {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+    margin: 18px 0 8px;
+  }
+  .beat {
+    background: var(--white);
+    border: 1px solid var(--line);
+    padding: 14px;
+  }
+  .beat .n {
+    font-family: "Avenir Next", "Segoe UI", sans-serif;
+    font-size: 12px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--teal);
+  }
+  footer.note {
+    margin-top: 28px;
+    color: var(--muted);
+    font-size: 15px;
+  }
+  @media (max-width: 720px) {
+    h1 { font-size: 32px; }
+    .shapes, .mem, .beats, .tiles { grid-template-columns: 1fr; }
+    .shapes .op { transform: rotate(90deg); }
+    main { padding: 28px 16px 64px; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <header class="hero">
+    <p class="kicker">Lesson script · FlashAttention-2</p>
+    <h1>How to teach the algorithm without handing over the kernel</h1>
+    <p class="lede">Three beats: the memory problem, the forward invariant, and one backward identity. Each slide asks one question. The algebra and the code on the board should come from a length-4 toy you compute by hand, then from your own forward loop.</p>
+  </header>
+
+  <div class="beats">
+    <div class="beat"><div class="n">Beat 1</div><strong>Vanilla</strong><p>Two matmuls and a softmax. The S × S matrix is the problem.</p></div>
+    <div class="beat"><div class="n">Beat 2</div><strong>Forward</strong><p>Tile Q against K and V. Carry enough state that the full row never exists.</p></div>
+    <div class="beat"><div class="n">Beat 3</div><strong>Backward</strong><p>Start from ordinary softmax. Delete the S × S tensors one at a time.</p></div>
+  </div>
+
+  <nav class="toc">
+    <a href="#s1">1 · Shapes</a>
+    <a href="#s2">2 · Kernels</a>
+    <a href="#s3">3 · The issue</a>
+    <a href="#s4">4 · Tiling</a>
+    <a href="#s5">5 · Online softmax</a>
+    <a href="#s6">6 · Your loop</a>
+    <a href="#s7">7 · What backward stores</a>
+    <a href="#s8">8 · One row</a>
+    <a href="#s9">9 · Recompute</a>
+    <a href="#s10">10 · Before you talk</a>
+  </nav>
+
+  <section class="slide" id="s1">
+    <p class="slide-label">Slide 1 · Vanilla attention</p>
+    <h2>The three steps, as shapes</h2>
+    <p>Write attention the way a straightforward PyTorch implementation does it, from your own code. One head, queries against keys, then a mix with values.</p>
+    <div class="shapes">
+      <div class="box"><strong>scores</strong><span>QKᵀ / √d</span><span>(S, d) × (d, S) → (S, S)</span></div>
+      <div class="op">then</div>
+      <div class="box"><strong>softmax</strong><span>row-wise</span><span>(S, S) → (S, S)</span></div>
+      <div class="op">then</div>
+      <div class="box"><strong>output</strong><span>PV</span><span>(S, S) × (S, d) → (S, d)</span></div>
+    </div>
+    <div class="say"><span class="tag">Say</span>The math result is an (S, d) tensor. Everything else is an intermediate.</div>
+    <div class="ask"><span class="tag">Ask</span>Which of those three tensors has a size that grows with S², and which one do we actually need to keep?</div>
+  </section>
+
+  <section class="slide" id="s2">
+    <p class="slide-label">Slide 2 · Kernel view</p>
+    <h2>Separate kernels, and a round trip through HBM</h2>
+    <p>The math is two matrix multiplies and an elementwise softmax. A normal PyTorch run launches a separate kernel for each, and the score matrix is written out and read back.</p>
+    <div class="mem">
+      <div class="panel hbm">
+        <h3>HBM</h3>
+        <p>Q, K, and V live here. So does the S × S score matrix after the first matmul, and again after softmax, before the second matmul reads it.</p>
+      </div>
+      <div class="panel sram">
+        <h3>On-chip</h3>
+        <p>Each kernel loads a piece, computes, and stores. Softmax never sees the matmul’s registers. The S × S matrix is the traffic between them.</p>
+      </div>
+    </div>
+    <p>Use the comparison already in your profiling notes. Scores and the output mix are the big FLOP counts. Softmax is a few million FLOPs and still shows up as a large fraction of time, because it is moving that matrix.</p>
+    <div class="ask"><span class="tag">Ask, before you show numbers</span>For S = 4096, d = 64, which step moves more bytes relative to the work it does: the matmuls, or the softmax?</div>
+  </section>
+
+  <section class="slide" id="s3">
+    <p class="slide-label">Slide 3 · The issue</p>
+    <h2>One sentence</h2>
+    <div class="say"><span class="tag">The sentence</span>Attention is bandwidth-bound because the S × S matrix does not fit on chip and gets materialized. The rest of the talk is how to get the same output without ever storing that matrix.</div>
+    <p>Leave this slide up while you transition. The forward pass is the construction. The backward pass is the same construction run in reverse, plus one identity.</p>
+  </section>
+
+  <section class="slide" id="s4">
+    <p class="slide-label">Slide 4 · Forward tiling</p>
+    <h2>A picture, not a formula</h2>
+    <p>Cut Q into row tiles. Cut K and V into tiles of the same size. One query tile stays on chip while key/value tiles stream past it.</p>
+    <div class="tiles">
+      <div class="qcol">
+        <div class="tile qt">Q0</div>
+        <div class="tile qt on">Q1</div>
+        <div class="tile qt">Q2</div>
+        <div class="tile qt">Q3</div>
+      </div>
+      <div>
+        <div class="kvrow">
+          <div class="tile kt">K0</div>
+          <div class="tile kt on">K1</div>
+          <div class="tile kt">K2</div>
+          <div class="tile kt">K3</div>
+        </div>
+        <p style="margin:8px 0 0;font-family:'Avenir Next','Segoe UI',sans-serif;font-size:13px;color:var(--muted);">Highlighted query tile stays resident. Highlighted key/value tile is the one currently on chip. The block of scores for this pair is Br × Bc, and it dies when the tile ends.</p>
+      </div>
+    </div>
+    <div class="say"><span class="tag">Say</span>The only tensors that grow with S and get written back are the output, and one scalar per query: the log-sum-exp. The full score matrix never exists.</div>
+    <div class="ask"><span class="tag">Ask</span>Why is the outer loop over query tiles and the inner loop over key/value tiles, rather than the other way around? What would you have to store if you swapped them?</div>
+  </section>
+
+  <section class="slide" id="s5">
+    <p class="slide-label">Slide 5 · Online softmax</p>
+    <h2>The puzzle, then a toy</h2>
+    <p>Softmax on a row needs a max and a sum over the whole row. A tile only shows you a slice of that row. Put this question on the slide before any update rule:</p>
+    <div class="ask"><span class="tag">The question</span>What three things must you carry from one key/value tile to the next so the final row still equals ordinary softmax?</div>
+    <p>Work this by hand before you write anything that looks like code. Sequence length 4, tile size 2, one query row, four scores you pick yourself.</p>
+    <h3>Full row, ordinary softmax</h3>
+    <div class="grid4">
+      <div class="cell">score 0</div>
+      <div class="cell">score 1</div>
+      <div class="cell">score 2</div>
+      <div class="cell">score 3</div>
+    </div>
+    <p>True row max: <span class="blank"></span> &nbsp; true normalizer: <span class="blank"></span> &nbsp; true probabilities: <span class="blank"></span></p>
+    <h3>Same row, one tile at a time</h3>
+    <table>
+      <thead>
+        <tr><th></th><th>Tile 0 · scores 0–1</th><th>Tile 1 · scores 2–3</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>max you have seen</td><td></td><td></td></tr>
+        <tr><td>running sum</td><td></td><td></td></tr>
+        <tr><td>running output</td><td></td><td></td></tr>
+      </tbody>
+    </table>
+    <div class="do"><span class="tag">Do on the board</span>Compute the true softmax on the full row. Then the same row in two tiles. They match only after you rescale the first tile’s sum and output when the max changes. That rescaling is the algorithm. Write the relation you used, in words, next to the numbers.</div>
+    <div class="say"><span class="tag">After the numbers work</span>The epilogue is one more step: turn the running output and the running normalizer into the real output row, and turn the running max plus the log of the normalizer into the scalar you will need in backward.</div>
+  </section>
+
+  <section class="slide" id="s6">
+    <p class="slide-label">Slide 6 · Where it lives</p>
+    <h2>Point at your forward loop</h2>
+    <p>Open your tiled forward. Do not paste a finished kernel onto the slide. Have the audience name the pieces.</p>
+    <table>
+      <thead>
+        <tr><th>Ask them to find</th><th>What it must be</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>the running max</td><td>updated once per key/value tile, for this query tile</td></tr>
+        <tr><td>the running normalizer</td><td>rescaled by the change in max, then increased by this tile</td></tr>
+        <tr><td>the running output</td><td>same rescaling, then a matmul of this tile’s probabilities with V</td></tr>
+        <tr><td>the epilogue</td><td>the lines that run only after the last key/value tile</td></tr>
+        <tr><td>what is saved</td><td>output, and one scalar per query. Not the score matrix.</td></tr>
+      </tbody>
+    </table>
+    <div class="ask"><span class="tag">Ask</span>Which lines exist only because the max changed between tiles? Cover them and say what would be wrong with the output.</div>
+  </section>
+
+  <section class="slide" id="s7">
+    <p class="slide-label">Slide 7 · Backward, start ordinary</p>
+    <h2>What vanilla backward stores</h2>
+    <p>Do not start from the FlashAttention formula. Start from the chain rule on a softmax attention layer that did materialize the matrices.</p>
+    <div class="say"><span class="tag">Say</span>Backward wants a gradient with respect to the scores. The usual implementation builds the attention matrix to get there. That matrix is exactly what the forward pass refused to store.</div>
+    <div class="ask"><span class="tag">Ask</span>If we refuse to save the S × S attention matrix, what is the smallest extra tensor the forward pass must have saved for us to rebuild a tile of it later?</div>
+  </section>
+
+  <section class="slide" id="s8">
+    <p class="slide-label">Slide 8 · One row, length 2</p>
+    <h2>Delete the Jacobian</h2>
+    <p>Take a single query. Write softmax of a length-2 score row, then its Jacobian, then multiply by an upstream gradient of the probabilities. Keep the arithmetic on a 2 × 2 board.</p>
+    <div class="do"><span class="tag">Do until this is true</span>Simplify until the Jacobian is gone and you are left with an elementwise product of the probabilities with a correction. The correction is a single scalar for that query. Name the scalar. Then show it can be computed from the output row and the upstream gradient of the output, using O = PV and the corresponding expression for the gradient of P.</div>
+    <p>When the length-2 scalar is obvious, say the same algebra holds for length S. That sentence is the slide. The general equation goes up only after the toy agrees with autograd on vanilla attention.</p>
+    <div class="ask"><span class="tag">Ask</span>Why is that scalar a property of the query row, independent of which key/value tile you are visiting?</div>
+  </section>
+
+  <section class="slide" id="s9">
+    <p class="slide-label">Slide 9 · Recompute</p>
+    <h2>The same picture as the forward</h2>
+    <p>With the identity in hand, the extra saved tensor is the per-query log-sum-exp. On the backward pass you reload a query tile and a key/value tile, recompute that tile of scores and probabilities, and apply the identity.</p>
+    <div class="mem">
+      <div class="panel">
+        <h3>Brought in</h3>
+        <p>Query tile, key tile, value tile, output tile, upstream output gradient, the saved log-sum-exp.</p>
+      </div>
+      <div class="panel">
+        <h3>Written out</h3>
+        <p>Gradients of Q, K, and V. The score tile is recomputed and dropped.</p>
+      </div>
+    </div>
+    <div class="do"><span class="tag">Check before the slide is finished</span>On the same length-4 toy, compare this tiled backward to autograd on vanilla attention. Put the equation on the slide only after those two agree.</div>
+  </section>
+
+  <section class="slide" id="s10">
+    <p class="slide-label">Slide 10 · Before you talk</p>
+    <h2>What the audience should be able to say</h2>
+    <ol>
+      <li>Vanilla attention writes an S × S matrix between two matmuls, and that traffic dominates softmax.</li>
+      <li>The forward pass keeps one query tile on chip, streams key/value tiles, and carries three pieces of row state.</li>
+      <li>Those three pieces match ordinary softmax on a toy row they computed both ways.</li>
+      <li>Backward does not store the attention matrix. A per-query scalar, plus recomputed tiles, replaces it.</li>
+      <li>They can point at your loop and name the running max, the running normalizer, the running output, and the epilogue.</li>
+    </ol>
+    <div class="do"><span class="tag">If a section is still fuzzy</span>Stay on the length-4 toy. A formula that has not survived that toy does not belong on a slide yet.</div>
+  </section>
+
+  <footer class="note">
+    <p>Companion pieces already in this directory: the softmax-backward writeup, and the note on Triton tile loads. This page is the order to teach them in. Fill the blanks from your own numbers.</p>
+  </footer>
+</main>
+</body>
+</html>
