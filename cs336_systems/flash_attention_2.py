@@ -1,5 +1,3 @@
-
-from sympy.polys.polyconfig import query
 import triton
 import triton.language as tl
 
