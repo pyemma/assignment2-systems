@@ -17,6 +17,13 @@ class FSDP(torch.nn.Module):
         handle = dist.all_gather_into_tensor(param.data, module.weight.data, async_op=True)
         return param, handle
 
+    @staticmethod
+    def _prefetch(idx, idx_to_module, world_size, compute_dtype):
+        module = idx_to_module[idx]
+        buffer, handle = FSDP._all_gather_param(module, world_size, compute_dtype)
+        module.buffer = buffer
+        module.handle = handle
+
     def __init__(self, module: torch.nn.Module, compute_dtype: torch.dtype | None = None):
         super().__init__()
         self.world_size = dist.get_world_size()
@@ -34,10 +41,7 @@ class FSDP(torch.nn.Module):
             idx = module.idx
             if idx == 0:  # this is the cold start part, immediately start the all gather for the first 2 layers
                 buffer, handle = FSDP._all_gather_param(module, self.world_size, self.compute_dtype)
-                next_module = self._index_to_module[1]
-                buffer1, handle1 = FSDP._all_gather_param(next_module, self.world_size, self.compute_dtype)
-                next_module.buffer = buffer1
-                next_module.handle = handle1
+                FSDP._prefetch(1, self._index_to_module, self.world_size, self.compute_dtype)
             else:
                 buffer, handle = module.buffer, module.handle
                 del module.buffer
@@ -63,11 +67,7 @@ class FSDP(torch.nn.Module):
             del module._saved_fp32
 
             if idx + 2 < len(self._index_to_module):
-                # start the fetch of next layer
-                next_module = self._index_to_module[idx+2]
-                next_buffer, next_handle = FSDP._all_gather_param(next_module, self.world_size, self.compute_dtype)
-                next_module.buffer = next_buffer
-                next_module.handle = next_handle
+                FSDP._prefetch(idx+2, self._index_to_module, self.world_size, self.compute_dtype)
             return output
 
         def _unshard_bwd(module, grad_output):
@@ -77,10 +77,7 @@ class FSDP(torch.nn.Module):
             idx = module.idx
             if idx == len(self._index_to_module) - 1:
                 buffer, handle = FSDP._all_gather_param(module, self.world_size, self.compute_dtype)
-                module1 = self._index_to_module[idx - 1]
-                buffer1, handle1 = FSDP._all_gather_param(module1, self.world_size, self.compute_dtype)
-                module1.buffer = buffer1
-                module1.handle = handle1
+                FSDP._prefetch(idx-1, self._index_to_module, self.world_size, self.compute_dtype)
             else:
                 buffer, handle = module.buffer, module.handle
                 del module.buffer
@@ -102,10 +99,7 @@ class FSDP(torch.nn.Module):
 
                     idx = module.idx
                     if idx - 2 >= 0:
-                        prev_module = self._index_to_module[idx - 2]
-                        prev_buffer, prev_handle = FSDP._all_gather_param(prev_module, self.world_size, self.compute_dtype)
-                        prev_module.buffer = prev_buffer
-                        prev_module.handle = prev_handle
+                        FSDP._prefetch(idx-2, self._index_to_module, self.world_size, self.compute_dtype)
                 else:
                     h = dist.all_reduce(param.grad.data, op=dist.ReduceOp.AVG, async_op=True)
                     self._handles.append((h, param, None))
